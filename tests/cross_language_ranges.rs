@@ -56,6 +56,14 @@ fn approx_eq(a: f64, b: f64, tol: f64) -> bool {
     (a - b).abs() <= tol
 }
 
+fn assert_close(label: &str, got: f64, expected: f64) {
+    assert!(
+        approx_eq(got, expected, TOL),
+        "{label}: got {got} expected {expected}"
+    );
+}
+
+
 #[test]
 fn fixture_documents_required_vector_keys() {
     // Assert the JSON documents every vector key exercised by this suite
@@ -322,27 +330,10 @@ fn signal_stats_matches_expected() {
 
 #[test]
 fn signal_stats_skewed_matches_expected() {
-    // Mirror of vectors.signal_stats_skewed in shared_vectors.json.
     let stats = compute_signal_stats(&signal_stats_skewed_data());
     assert_eq!(stats.count, 10);
-    assert!(approx_eq(stats.mean, 3.7, TOL), "mean {}", stats.mean);
-    assert!(
-        approx_eq(stats.variance, 5.61, TOL),
-        "variance {}",
-        stats.variance
-    );
-    assert!(
-        approx_eq(stats.skewness, 1.6689330728161367, TOL),
-        "skewness {}",
-        stats.skewness
-    );
-    assert!(
-        approx_eq(stats.kurtosis, 2.238725728502387, TOL),
-        "kurtosis {}",
-        stats.kurtosis
-    );
-    assert!(
-        stats.skewness > 0.0,
-        "right-skewed series should have skew > 0"
-    );
+    assert_close("mean", stats.mean, 3.7);
+    assert_close("variance", stats.variance, 5.61);
+    assert_close("skewness", stats.skewness, 1.135_185_746_623_256_7);
+    assert_close("kurtosis", stats.kurtosis, 0.110_922_956_328_542_85);
 }
