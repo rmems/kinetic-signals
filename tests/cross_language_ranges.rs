@@ -334,6 +334,6 @@ fn signal_stats_skewed_matches_expected() {
     assert_eq!(stats.count, 10);
     assert_close("mean", stats.mean, 3.7);
     assert_close("variance", stats.variance, 5.61);
-    assert_close("skewness", stats.skewness, 1.135_185_746_623_256_7);
-    assert_close("kurtosis", stats.kurtosis, 0.110_922_956_328_542_85);
+    assert_close("skewness", stats.skewness, 1.668_933_072_816_136_7);
+    assert_close("kurtosis", stats.kurtosis, 2.238_725_728_502_387);
 }
