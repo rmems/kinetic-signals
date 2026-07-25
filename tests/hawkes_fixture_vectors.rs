@@ -89,15 +89,12 @@ fn assert_hawkes_streaming_step_fixture(vector_key: &str) {
     assert_field_in_output_range(&rc, "new_decay_sum", new_decay);
 }
 
-fn assert_hawkes_sequence_fixture(vector_key: &str) {
-    let root = fixture();
-    let v = &root["vectors"][vector_key];
-    let tolerance = tol(v);
-    let input = &v["input"];
-    let events = f64s(&input["event_times"]);
-    let params = params_from_json(&input["params"]);
-    let initial_decay = require_f64(input, "initial_decay_sum");
-    let initial_last = match input.get("initial_last_event_time") {
+fn resume_last_event_time(
+    vector_key: &str,
+    input: &serde_json::Value,
+    initial_decay: f64,
+) -> Option<f64> {
+    match input.get("initial_last_event_time") {
         Some(_) => Some(require_f64(input, "initial_last_event_time")),
         None if initial_decay != 0.0 => {
             panic!(
@@ -105,19 +102,17 @@ fn assert_hawkes_sequence_fixture(vector_key: &str) {
             );
         }
         None => None,
-    };
-    let walk = walk_hawkes_streaming(&events, &params, initial_decay, initial_last);
-    let exp = &v["expected"];
-    let expected_len = parse_size_contract(
-        &v["output_range"]["length"],
-        &SizeCtx {
-            event_times: Some(events.len()),
-            values: None,
-            data: None,
-        },
-    );
-    assert_eq!(walk.intensities.len(), expected_len);
-    assert_eq!(walk.decay_sums.len(), expected_len);
+    }
+}
+
+fn assert_hawkes_walk_goldens(
+    walk: &HawkesWalk,
+    exp: &serde_json::Value,
+    events: &[f64],
+    params: &HawkesParams,
+    initial_decay: f64,
+    tolerance: f64,
+) {
     assert_series(SeriesCheck {
         label: "intensity",
         got: &walk.intensities,
@@ -132,7 +127,7 @@ fn assert_hawkes_sequence_fixture(vector_key: &str) {
     });
     let post = params.mu + params.alpha * walk.decay_sums.last().copied().unwrap_or(0.0);
     if initial_decay == 0.0 {
-        let batch = compute_hawkes(&events, &params);
+        let batch = compute_hawkes(events, params);
         assert_close(CloseCheck {
             label: "batch_vs_stream_post",
             got: post,
@@ -146,6 +141,36 @@ fn assert_hawkes_sequence_fixture(vector_key: &str) {
         expected: require_f64(exp, "post_event_final_intensity"),
         tolerance,
     });
+}
+
+fn assert_hawkes_sequence_fixture(vector_key: &str) {
+    let root = fixture();
+    let v = &root["vectors"][vector_key];
+    let tolerance = tol(v);
+    let input = &v["input"];
+    let events = f64s(&input["event_times"]);
+    let params = params_from_json(&input["params"]);
+    let initial_decay = require_f64(input, "initial_decay_sum");
+    let initial_last = resume_last_event_time(vector_key, input, initial_decay);
+    let walk = walk_hawkes_streaming(&events, &params, initial_decay, initial_last);
+    let expected_len = parse_size_contract(
+        &v["output_range"]["length"],
+        &SizeCtx {
+            event_times: Some(events.len()),
+            values: None,
+            data: None,
+        },
+    );
+    assert_eq!(walk.intensities.len(), expected_len);
+    assert_eq!(walk.decay_sums.len(), expected_len);
+    assert_hawkes_walk_goldens(
+        &walk,
+        &v["expected"],
+        &events,
+        &params,
+        initial_decay,
+        tolerance,
+    );
 }
 
 #[test]
