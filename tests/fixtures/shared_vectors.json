@@ -114,7 +114,7 @@
     },
     "hawkes_streaming": {
       "input": {
-        "prev_intensity": 0.0,
+        "prev_intensity": 42.0,
         "new_event_time": 0.0,
         "last_event_time": 0.0,
         "params": {

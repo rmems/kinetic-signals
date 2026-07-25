@@ -129,6 +129,12 @@ struct InRangeCheck<'a> {
 
 fn assert_in_range(check: InRangeCheck<'_>) {
     assert!(
+        check.got.is_finite(),
+        "{}: got non-finite value {}",
+        check.label,
+        check.got
+    );
+    assert!(
         check.got + check.tolerance >= check.lo && check.got - check.tolerance <= check.hi,
         "{}: got {} outside [{}, {}] (tol={})",
         check.label,
@@ -200,6 +206,7 @@ struct SurpriseStepCheck<'a> {
     params: &'a SurpriseParams,
     expected: SurpriseExpect,
     tolerance: f64,
+    ranges: &'a OutputRangeCtx<'a>,
 }
 
 fn assert_surprise_step(check: SurpriseStepCheck<'_>) {
@@ -244,6 +251,13 @@ fn assert_surprise_step(check: SurpriseStepCheck<'_>) {
         detect_anomaly(check.result, check.params),
         check.expected.anomaly
     );
+    assert_field_in_output_range(check.ranges, "surprise", check.result.surprise);
+    assert_field_in_output_range(check.ranges, "z_score", check.result.z_score);
+    assert_field_in_output_range(
+        check.ranges,
+        "expected_return",
+        check.result.expected_return,
+    );
 }
 
 fn expect_from_step(step: &Value) -> SurpriseExpect {
@@ -269,6 +283,14 @@ fn assert_surprise_fixture(vector_key: &str) {
         .as_array()
         .expect("expected.steps array");
     assert_eq!(results.len(), steps.len());
+    let ranges = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: None,
+            bins: None,
+        },
+        tolerance,
+    };
     for (i, (r, step)) in results.iter().zip(steps.iter()).enumerate() {
         assert_surprise_step(SurpriseStepCheck {
             step: i,
@@ -276,6 +298,7 @@ fn assert_surprise_fixture(vector_key: &str) {
             params: &params,
             expected: expect_from_step(step),
             tolerance,
+            ranges: &ranges,
         });
     }
 }
@@ -415,6 +438,16 @@ fn hawkes_streaming_single_step_matches_fixture() {
         expected: post,
         tolerance,
     });
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: Some(params.mu),
+            bins: None,
+        },
+        tolerance,
+    };
+    assert_field_in_output_range(&rc, "intensity", intensity);
+    assert_field_in_output_range(&rc, "new_decay_sum", new_decay);
 }
 
 #[test]
@@ -456,6 +489,20 @@ fn hawkes_streaming_sequence_matches_fixture() {
         expected: require_f64(exp, "post_event_final_intensity"),
         tolerance,
     });
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: Some(params.mu),
+            bins: None,
+        },
+        tolerance,
+    };
+    for &intensity in &walk.intensities {
+        assert_field_in_output_range(&rc, "intensities", intensity);
+    }
+    for &decay_sum in &walk.decay_sums {
+        assert_field_in_output_range(&rc, "decay_sums", decay_sum);
+    }
 }
 
 #[test]
@@ -473,6 +520,16 @@ fn surprise_is_nonnegative_and_anomaly_consistent() {
     assert!(spike.surprise >= 0.0);
     assert_eq!(spike.surprise, spike.z_score.abs());
     assert!(spike.surprise > params.threshold);
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: Some(params.mu),
+            bins: None,
+        },
+        tolerance: tol(v),
+    };
+    assert_field_in_output_range(&rc, "surprise", spike.surprise);
+    assert_field_in_output_range(&rc, "z_score", spike.z_score);
 }
 
 #[test]
@@ -547,6 +604,14 @@ fn assert_signal_stats_fixture(vector_key: &str) {
     let stats = compute_signal_stats(&data);
     let exp = &v["expected"];
     assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: None,
+            bins: None,
+        },
+        tolerance,
+    };
     for (label, got) in [
         ("mean", stats.mean),
         ("variance", stats.variance),
@@ -559,6 +624,7 @@ fn assert_signal_stats_fixture(vector_key: &str) {
             expected: exp[label].as_f64().unwrap(),
             tolerance,
         });
+        assert_field_in_output_range(&rc, label, got);
     }
 }
 
