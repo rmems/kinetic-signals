@@ -140,6 +140,29 @@ fn hawkes_streaming_single_step_matches_expected() {
     );
 }
 
+fn walk_hawkes_streaming(events: &[f64], params: &HawkesParams) -> (Vec<f64>, Vec<f64>) {
+    let mut decay_sum = 0.0;
+    let mut last = events[0];
+    let mut intensities = Vec::new();
+    let mut decay_sums = Vec::new();
+    for &t in &events[1..] {
+        let (intensity, new_decay) = compute_hawkes_streaming(0.0, t, last, params, decay_sum);
+        intensities.push(intensity);
+        decay_sums.push(new_decay);
+        decay_sum = new_decay;
+        last = t;
+    }
+    (intensities, decay_sums)
+}
+
+fn assert_series_matches(label: &str, got: &[f64], expected: &[f64], min_ok: f64) {
+    assert_eq!(got.len(), expected.len());
+    for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
+        assert!(approx_eq(g, e, TOL), "{label}[{i}]: got {g}, expected {e}");
+        assert!(g >= min_ok);
+    }
+}
+
 #[test]
 fn hawkes_streaming_sequence_matches_expected() {
     // Mirror of vectors.hawkes_streaming_sequence in shared_vectors.json.
@@ -164,43 +187,10 @@ fn hawkes_streaming_sequence_matches_expected() {
         5.446947959580295,
     ];
 
-    let mut decay_sum = 0.0;
-    let mut last = events[0];
-    let mut intensities = Vec::new();
-    let mut decay_sums = Vec::new();
-
-    for &t in &events[1..] {
-        let (intensity, new_decay) = compute_hawkes_streaming(0.0, t, last, &params, decay_sum);
-        intensities.push(intensity);
-        decay_sums.push(new_decay);
-        decay_sum = new_decay;
-        last = t;
-    }
-
+    let (intensities, decay_sums) = walk_hawkes_streaming(&events, &params);
     assert_eq!(intensities.len(), events.len() - 1);
-    assert_eq!(intensities.len(), expected_intensities.len());
-    for (i, (&got, &exp)) in intensities
-        .iter()
-        .zip(expected_intensities.iter())
-        .enumerate()
-    {
-        assert!(
-            approx_eq(got, exp, TOL),
-            "intensity[{i}]: got {got}, expected {exp}"
-        );
-        assert!(got >= params.mu);
-    }
-    for (i, (&got, &exp)) in decay_sums
-        .iter()
-        .zip(expected_decay_sums.iter())
-        .enumerate()
-    {
-        assert!(
-            approx_eq(got, exp, TOL),
-            "decay_sum[{i}]: got {got}, expected {exp}"
-        );
-        assert!(got >= 0.0);
-    }
+    assert_series_matches("intensity", &intensities, &expected_intensities, params.mu);
+    assert_series_matches("decay_sum", &decay_sums, &expected_decay_sums, 0.0);
 }
 
 #[test]
@@ -220,13 +210,29 @@ fn surprise_is_nonnegative_and_anomaly_consistent() {
     );
 }
 
+fn assert_surprise_step(
+    i: usize,
+    r: &kinetic_signals::SurpriseResult<f64>,
+    params: &SurpriseParams<f64>,
+    exp_s: f64,
+    exp_z: f64,
+    exp_lr: f64,
+    exp_anom: bool,
+) {
+    assert_close(&format!("surprise[{i}]"), r.surprise, exp_s);
+    assert_close(&format!("z_score[{i}]"), r.z_score, exp_z);
+    assert_close(&format!("log_return[{i}]"), r.log_return, exp_lr);
+    assert!(r.surprise >= 0.0);
+    assert_eq!(r.surprise, r.z_score.abs());
+    assert_eq!(detect_anomaly(r, params), exp_anom);
+}
+
 #[test]
 fn surprise_sequence_matches_expected() {
     // Mirror of vectors.surprise_sequence in shared_vectors.json.
     let params = SurpriseParams::<f64>::default();
     let values = surprise_sequence_values();
     let results = compute_surprise_sequence(&values, &params);
-
     assert_eq!(results.len(), values.len() - 1);
 
     let expected = [
@@ -250,30 +256,16 @@ fn surprise_sequence_matches_expected() {
             true,
         ),
     ];
-
     for (i, r) in results.iter().enumerate() {
-        let (exp_s, exp_z, exp_lr, exp_anom) = expected[i];
-        assert!(
-            approx_eq(r.surprise, exp_s, TOL),
-            "surprise[{i}]: got {}, expected {exp_s}",
-            r.surprise
-        );
-        assert!(
-            approx_eq(r.z_score, exp_z, TOL),
-            "z_score[{i}]: got {}, expected {exp_z}",
-            r.z_score
-        );
-        assert!(
-            approx_eq(r.log_return, exp_lr, TOL),
-            "log_return[{i}]: got {}, expected {exp_lr}",
-            r.log_return
-        );
-        assert!(r.surprise >= 0.0);
-        assert_eq!(r.surprise, r.z_score.abs());
-        assert_eq!(detect_anomaly(r, &params), exp_anom);
+        let (s, z, lr, anom) = expected[i];
+        assert_surprise_step(i, r, &params, s, z, lr, anom);
     }
+}
 
-    // Short input yields empty sequence.
+#[test]
+fn surprise_sequence_short_input_empty() {
+    let params = SurpriseParams::<f64>::default();
+    let values = surprise_sequence_values();
     assert!(compute_surprise_sequence(&values[..1], &params).is_empty());
 }
 
@@ -320,7 +312,10 @@ fn signal_stats_matches_expected() {
         stats.kurtosis
     );
     assert!(stats.variance >= 0.0);
+}
 
+#[test]
+fn signal_stats_empty_is_zero() {
     let empty = compute_signal_stats(&[]);
     assert_eq!(empty.count, 0);
     assert_eq!(empty.mean, 0.0);
