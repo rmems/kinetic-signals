@@ -390,39 +390,32 @@ fn volatility_rms_nonnegative() {
     assert!(rms >= 0.0 && rms.is_finite());
 }
 
-#[test]
-fn signal_stats_matches_fixture() {
+fn assert_signal_stats_fixture(vector_key: &str) {
     let root = fixture();
-    let v = &root["vectors"]["signal_stats"];
+    let v = &root["vectors"][vector_key];
     let tolerance = tol(v);
     let data = f64s(&v["input"]["data"]);
     let stats = compute_signal_stats(&data);
     let exp = &v["expected"];
     assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
-    assert_close(CloseCheck {
-        label: "mean",
-        got: stats.mean,
-        expected: exp["mean"].as_f64().unwrap(),
-        tolerance,
-    });
-    assert_close(CloseCheck {
-        label: "variance",
-        got: stats.variance,
-        expected: exp["variance"].as_f64().unwrap(),
-        tolerance,
-    });
-    assert_close(CloseCheck {
-        label: "skewness",
-        got: stats.skewness,
-        expected: exp["skewness"].as_f64().unwrap(),
-        tolerance,
-    });
-    assert_close(CloseCheck {
-        label: "kurtosis",
-        got: stats.kurtosis,
-        expected: exp["kurtosis"].as_f64().unwrap(),
-        tolerance,
-    });
+    for (label, got) in [
+        ("mean", stats.mean),
+        ("variance", stats.variance),
+        ("skewness", stats.skewness),
+        ("kurtosis", stats.kurtosis),
+    ] {
+        assert_close(CloseCheck {
+            label,
+            got,
+            expected: exp[label].as_f64().unwrap(),
+            tolerance,
+        });
+    }
+}
+
+#[test]
+fn signal_stats_matches_fixture() {
+    assert_signal_stats_fixture("signal_stats");
 }
 
 #[test]
@@ -435,35 +428,5 @@ fn signal_stats_empty_is_zero() {
 
 #[test]
 fn signal_stats_skewed_matches_fixture() {
-    let root = fixture();
-    let v = &root["vectors"]["signal_stats_skewed"];
-    let tolerance = tol(v);
-    let data = f64s(&v["input"]["data"]);
-    let stats = compute_signal_stats(&data);
-    let exp = &v["expected"];
-    assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
-    assert_close(CloseCheck {
-        label: "mean",
-        got: stats.mean,
-        expected: exp["mean"].as_f64().unwrap(),
-        tolerance,
-    });
-    assert_close(CloseCheck {
-        label: "variance",
-        got: stats.variance,
-        expected: exp["variance"].as_f64().unwrap(),
-        tolerance,
-    });
-    assert_close(CloseCheck {
-        label: "skewness",
-        got: stats.skewness,
-        expected: exp["skewness"].as_f64().unwrap(),
-        tolerance,
-    });
-    assert_close(CloseCheck {
-        label: "kurtosis",
-        got: stats.kurtosis,
-        expected: exp["kurtosis"].as_f64().unwrap(),
-        tolerance,
-    });
+    assert_signal_stats_fixture("signal_stats_skewed");
 }
