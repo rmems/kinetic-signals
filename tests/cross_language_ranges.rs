@@ -83,6 +83,79 @@ fn assert_series(check: SeriesCheck<'_>) {
     }
 }
 
+struct BoundCtx {
+    mu: Option<f64>,
+    bins: Option<usize>,
+}
+
+fn parse_range_endpoint(v: &Value, ctx: &BoundCtx) -> f64 {
+    if let Some(n) = v.as_f64() {
+        return n;
+    }
+    match v.as_str() {
+        Some("Inf") => f64::INFINITY,
+        Some("-Inf") => f64::NEG_INFINITY,
+        Some("mu") => ctx
+            .mu
+            .unwrap_or_else(|| panic!("range endpoint `mu` requires params context")),
+        Some("ln(bins)") => {
+            let bins = ctx
+                .bins
+                .unwrap_or_else(|| panic!("range endpoint `ln(bins)` requires bins context"));
+            (bins as f64).ln()
+        }
+        other => panic!("unsupported output_range endpoint: {other:?}"),
+    }
+}
+
+fn range_pair(range: &Value, ctx: &BoundCtx) -> (f64, f64) {
+    let arr = range
+        .as_array()
+        .unwrap_or_else(|| panic!("output_range entry must be a [lo, hi] array"));
+    assert_eq!(arr.len(), 2, "output_range entry must have length 2");
+    (
+        parse_range_endpoint(&arr[0], ctx),
+        parse_range_endpoint(&arr[1], ctx),
+    )
+}
+
+struct InRangeCheck<'a> {
+    label: &'a str,
+    got: f64,
+    lo: f64,
+    hi: f64,
+    tolerance: f64,
+}
+
+fn assert_in_range(check: InRangeCheck<'_>) {
+    assert!(
+        check.got + check.tolerance >= check.lo && check.got - check.tolerance <= check.hi,
+        "{}: got {} outside [{}, {}] (tol={})",
+        check.label,
+        check.got,
+        check.lo,
+        check.hi,
+        check.tolerance
+    );
+}
+
+fn assert_field_in_output_range(
+    ranges: &Value,
+    field: &str,
+    got: f64,
+    ctx: &BoundCtx,
+    tolerance: f64,
+) {
+    let (lo, hi) = range_pair(&ranges[field], ctx);
+    assert_in_range(InRangeCheck {
+        label: field,
+        got,
+        lo,
+        hi,
+        tolerance,
+    });
+}
+
 struct HawkesWalk {
     intensities: Vec<f64>,
     decay_sums: Vec<f64>,
@@ -264,7 +337,16 @@ fn hurst_within_unit_interval() {
     let tolerance = tol(v);
     let r = compute_hurst(&data);
     assert!(r.h.is_finite());
-    assert!((0.0..=1.0).contains(&r.h), "hurst H out of [0,1]: {}", r.h);
+    assert_field_in_output_range(
+        &v["output_range"],
+        "h",
+        r.h,
+        &BoundCtx {
+            mu: None,
+            bins: None,
+        },
+        tolerance,
+    );
     let r2 = compute_hurst(&data);
     assert_close(CloseCheck {
         label: "hurst_deterministic",
@@ -282,8 +364,14 @@ fn hawkes_intensity_at_least_baseline() {
     let params = params_from_json(&v["input"]["params"]);
     let r = compute_hawkes(&events, &params);
     assert!(r.intensity.is_finite());
-    assert!(r.intensity >= params.mu);
-    assert!(r.avg_excitation >= 0.0);
+    let ctx = BoundCtx {
+        mu: Some(params.mu),
+        bins: None,
+    };
+    let ranges = &v["output_range"];
+    let tolerance = tol(v);
+    assert_field_in_output_range(ranges, "intensity", r.intensity, &ctx, tolerance);
+    assert_field_in_output_range(ranges, "avg_excitation", r.avg_excitation, &ctx, tolerance);
     assert_eq!(r.event_count, events.len());
 }
 
@@ -295,34 +383,33 @@ fn hawkes_streaming_single_step_matches_fixture() {
     let input = &v["input"];
     let params = params_from_json(&input["params"]);
     let (intensity, new_decay) = compute_hawkes_streaming(
-        input["prev_intensity"].as_f64().unwrap(),
-        input["new_event_time"].as_f64().unwrap(),
-        input["last_event_time"].as_f64().unwrap(),
+        require_f64(input, "prev_intensity"),
+        require_f64(input, "new_event_time"),
+        require_f64(input, "last_event_time"),
         &params,
-        input["decay_sum"].as_f64().unwrap(),
+        require_f64(input, "decay_sum"),
     );
     let exp = &v["expected"];
     assert_close(CloseCheck {
         label: "intensity",
         got: intensity,
-        expected: exp["intensity"].as_f64().unwrap(),
+        expected: require_f64(exp, "intensity"),
         tolerance,
     });
     assert_close(CloseCheck {
         label: "new_decay_sum",
         got: new_decay,
-        expected: exp["new_decay_sum"].as_f64().unwrap(),
+        expected: require_f64(exp, "new_decay_sum"),
         tolerance,
     });
-    if let Some(post) = exp.get("post_event_intensity").and_then(|x| x.as_f64()) {
-        let post_got = params.mu + params.alpha * new_decay;
-        assert_close(CloseCheck {
-            label: "post_event_intensity",
-            got: post_got,
-            expected: post,
-            tolerance,
-        });
-    }
+    let post = require_f64(exp, "post_event_intensity");
+    let post_got = params.mu + params.alpha * new_decay;
+    assert_close(CloseCheck {
+        label: "post_event_intensity",
+        got: post_got,
+        expected: post,
+        tolerance,
+    });
 }
 
 #[test]
@@ -331,7 +418,7 @@ fn hawkes_streaming_sequence_matches_fixture() {
     let v = &root["vectors"]["hawkes_streaming_sequence"];
     let tolerance = tol(v);
     let events = f64s(&v["input"]["event_times"]);
-    let params = params_from_json(v["input"].get("params").unwrap_or(&Value::Null));
+    let params = params_from_json(&v["input"]["params"]);
     let initial_decay = require_f64(&v["input"], "initial_decay_sum");
     let walk = walk_hawkes_streaming(&events, &params, initial_decay);
     let exp = &v["expected"];
@@ -358,17 +445,12 @@ fn hawkes_streaming_sequence_matches_fixture() {
             tolerance,
         });
     }
-    if let Some(e) = exp
-        .get("post_event_final_intensity")
-        .and_then(|x| x.as_f64())
-    {
-        assert_close(CloseCheck {
-            label: "post_event_final",
-            got: post,
-            expected: e,
-            tolerance,
-        });
-    }
+    assert_close(CloseCheck {
+        label: "post_event_final",
+        got: post,
+        expected: require_f64(exp, "post_event_final_intensity"),
+        tolerance,
+    });
 }
 
 #[test]
@@ -412,9 +494,13 @@ fn entropy_within_bounds() {
     let bins = v["input"]["bins"].as_u64().unwrap() as usize;
     let tolerance = tol(v);
     let r = compute_shannon_entropy(&signal, bins);
-    let max_entropy = (bins as f64).ln();
-    assert!(r.shannon >= 0.0 && r.shannon <= max_entropy + tolerance);
-    assert!((0.0..=1.0 + tolerance).contains(&r.relative));
+    let ctx = BoundCtx {
+        mu: None,
+        bins: Some(bins),
+    };
+    let ranges = &v["output_range"];
+    assert_field_in_output_range(ranges, "shannon", r.shannon, &ctx, tolerance);
+    assert_field_in_output_range(ranges, "relative", r.relative, &ctx, tolerance);
     assert!(r.bin_count <= bins);
 }
 
@@ -429,7 +515,17 @@ fn volatility_rms_nonnegative() {
         est.push(x as f32);
     }
     let rms = est.rms();
-    assert!(rms >= 0.0 && rms.is_finite());
+    assert!(rms.is_finite());
+    assert_field_in_output_range(
+        &v["output_range"],
+        "rms",
+        rms as f64,
+        &BoundCtx {
+            mu: None,
+            bins: None,
+        },
+        tol(v),
+    );
 }
 
 fn assert_signal_stats_fixture(vector_key: &str) {
