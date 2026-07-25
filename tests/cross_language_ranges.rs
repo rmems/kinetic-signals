@@ -83,15 +83,19 @@ struct HawkesWalk {
 }
 
 /// Process every event, including the first (seed last=t0 so dt=0).
-fn walk_hawkes_streaming(events: &[f64], params: &HawkesParams) -> HawkesWalk {
+fn walk_hawkes_streaming(
+    events: &[f64],
+    params: &HawkesParams,
+    initial_decay_sum: f64,
+) -> HawkesWalk {
     assert!(!events.is_empty());
-    let mut decay_sum = 0.0;
+    let mut decay_sum = initial_decay_sum;
     let mut last = events[0];
     let mut intensities = Vec::with_capacity(events.len());
     let mut decay_sums = Vec::with_capacity(events.len());
     for (i, &t) in events.iter().enumerate() {
         let last_for_step = if i == 0 { t } else { last };
-        let prior = if i == 0 { 0.0 } else { decay_sum };
+        let prior = if i == 0 { initial_decay_sum } else { decay_sum };
         let (intensity, new_decay) = compute_hawkes_streaming(0.0, t, last_for_step, params, prior);
         intensities.push(intensity);
         decay_sums.push(new_decay);
@@ -210,7 +214,7 @@ fn params_from_json(v: &Value) -> HawkesParams {
 fn surprise_params_from_json(v: &Value) -> SurpriseParams {
     SurpriseParams {
         mu: v["mu"].as_f64().unwrap_or(0.0),
-        sigma: v["sigma"].as_f64().unwrap_or(0.15),
+        sigma: v["sigma"].as_f64().unwrap_or(0.1),
         dt: v["dt"].as_f64().unwrap_or(0.001),
         threshold: v["threshold"].as_f64().unwrap_or(3.0),
     }
@@ -306,7 +310,8 @@ fn hawkes_streaming_sequence_matches_fixture() {
     let tolerance = tol(v);
     let events = f64s(&v["input"]["event_times"]);
     let params = params_from_json(v["input"].get("params").unwrap_or(&Value::Null));
-    let walk = walk_hawkes_streaming(&events, &params);
+    let initial_decay = v["input"]["initial_decay_sum"].as_f64().unwrap_or(0.0);
+    let walk = walk_hawkes_streaming(&events, &params, initial_decay);
     let exp = &v["expected"];
     assert_series(SeriesCheck {
         label: "intensity",
