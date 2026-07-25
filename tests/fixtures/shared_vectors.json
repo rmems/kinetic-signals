@@ -1,20 +1,50 @@
 {
-  "_comment": "Golden test vectors for kinetic-signals (Rust). Tracks GH#28 / LIM-201 (streaming expansion) and GH#3 / LIM-31 (batch ranges). Historically shared with SpikeStream.jl; SpikeStream no longer implements Hurst/Hawkes/GBM proxies — these remain Rust-side fixtures for determinism and any future binding parity. All floating-point comparisons use the documented tolerances.",
-  "tolerance": 1e-6,
+  "_comment": "Shared golden fixtures for kinetic-signals (and SpikeStream.jl parity where those APIs still align). Expanded with streaming Hawkes, surprise_sequence, and signal_stats vectors for Rust determinism / future bindings. Hurst/Hawkes/GBM batch keys remain the historical cross-language contract; streaming keys are Rust-side extensions until Julia consumers adopt them. Tolerance: 1e-6 unless overridden per vector.",
+  "tolerance": 1e-06,
   "vectors": {
     "hurst": {
-      "input": { "data": "[i * 0.1 for i in 0..64]" },
-      "output_range": { "h": [0.0, 1.0] },
-      "tolerance": 1e-6,
+      "input": {
+        "data": "[i * 0.1 for i in 0..64]"
+      },
+      "output_range": {
+        "h": [
+          0.0,
+          1.0
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "Hurst exponent is clamped to [0, 1]. is_persistent = h > 0.52, is_antipersistent = h < 0.48."
     },
     "hawkes": {
       "input": {
-        "event_times": [0.0, 0.01, 0.02, 0.03, 0.1, 0.5, 0.51, 0.52],
-        "params": { "mu": 0.1, "alpha": 0.5, "beta": 1.0, "dt": 0.001 }
+        "event_times": [
+          0.0,
+          0.01,
+          0.02,
+          0.03,
+          0.1,
+          0.5,
+          0.51,
+          0.52
+        ],
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        }
       },
-      "output_range": { "intensity": ["mu", "Inf"], "avg_excitation": [0.0, "Inf"] },
-      "tolerance": 1e-6,
+      "output_range": {
+        "intensity": [
+          "mu",
+          "Inf"
+        ],
+        "avg_excitation": [
+          0.0,
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "intensity >= mu; avg_excitation >= 0; event_count == input length."
     },
     "hawkes_streaming": {
@@ -22,7 +52,12 @@
         "prev_intensity": 0.1,
         "new_event_time": 0.51,
         "last_event_time": 0.5,
-        "params": { "mu": 0.1, "alpha": 0.5, "beta": 1.0, "dt": 0.001 },
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        },
         "decay_sum": 2.5
       },
       "expected": {
@@ -30,16 +65,36 @@
         "new_decay_sum": 3.47512458437292
       },
       "output_range": {
-        "intensity": ["mu", "Inf"],
-        "new_decay_sum": [0.0, "Inf"]
+        "intensity": [
+          "mu",
+          "Inf"
+        ],
+        "new_decay_sum": [
+          0.0,
+          "Inf"
+        ]
       },
-      "tolerance": 1e-6,
+      "tolerance": 1e-06,
       "notes": "Single step of compute_hawkes_streaming. prev_intensity is unused by the algorithm. new_intensity = mu + alpha * decay_sum * exp(-beta * (new_event_time - last_event_time)); new_decay_sum = decayed_sum + 1.0. Compare expected within tolerance 1e-6."
     },
     "hawkes_streaming_sequence": {
       "input": {
-        "event_times": [0.0, 0.01, 0.02, 0.03, 0.1, 0.5, 0.51, 0.52],
-        "params": { "mu": 0.1, "alpha": 0.5, "beta": 1.0, "dt": 0.001 },
+        "event_times": [
+          0.0,
+          0.01,
+          0.02,
+          0.03,
+          0.1,
+          0.5,
+          0.51,
+          0.52
+        ],
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        },
         "initial_decay_sum": 0.0
       },
       "expected": {
@@ -55,7 +110,7 @@
         "decay_sums": [
           1.0,
           1.990049833749168,
-          2.9702485070559233,
+          2.9702485070559232,
           3.7694413515638123,
           3.526732100308897,
           4.491640529588677,
@@ -63,27 +118,58 @@
         ]
       },
       "output_range": {
-        "intensities": ["mu", "Inf"],
-        "decay_sums": [0.0, "Inf"],
+        "intensities": [
+          "mu",
+          "Inf"
+        ],
+        "decay_sums": [
+          0.0,
+          "Inf"
+        ],
         "length": "event_times.len() - 1"
       },
-      "tolerance": 1e-6,
+      "tolerance": 1e-06,
       "notes": "Walk compute_hawkes_streaming over consecutive pairs of event_times starting with initial_decay_sum=0. Length of intensities/decay_sums is event_times.len()-1. Intensity at each step is mu + alpha * decayed previous sum (the new event is added to decay_sum after intensity is computed)."
     },
     "surprise": {
       "input": {
         "current_value": 150.0,
         "previous_value": 100.0,
-        "params": { "mu": 0.0, "sigma": 0.1, "dt": 0.001, "threshold": 3.0 }
+        "params": {
+          "mu": 0.0,
+          "sigma": 0.1,
+          "dt": 0.001,
+          "threshold": 3.0
+        }
       },
-      "output_range": { "surprise": [0.0, "Inf"], "z_score": ["-Inf", "Inf"] },
-      "tolerance": 1e-6,
+      "output_range": {
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "surprise == abs(z_score) >= 0; anomaly when surprise > threshold. Non-positive inputs yield a zeroed result."
     },
     "surprise_sequence": {
       "input": {
-        "values": [100.0, 100.0, 101.0, 150.0, 148.0],
-        "params": { "mu": 0.0, "sigma": 0.1, "dt": 0.001, "threshold": 3.0 }
+        "values": [
+          100.0,
+          100.0,
+          101.0,
+          150.0,
+          148.0
+        ],
+        "params": {
+          "mu": 0.0,
+          "sigma": 0.1,
+          "dt": 0.001,
+          "threshold": 3.0
+        }
       },
       "expected": {
         "results": [
@@ -118,34 +204,79 @@
         ]
       },
       "output_range": {
-        "surprise": [0.0, "Inf"],
-        "z_score": ["-Inf", "Inf"],
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ],
         "length": "values.len() - 1"
       },
-      "tolerance": 1e-6,
+      "tolerance": 1e-06,
       "notes": "compute_surprise_sequence yields one SurpriseResult per consecutive pair (len = values.len()-1). anomaly = surprise > threshold. Empty/short inputs (<2) yield []. Compare floats within tolerance 1e-6."
     },
     "entropy": {
       "input": {
-        "data": [1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0],
+        "data": [
+          1.0,
+          2.0,
+          2.0,
+          3.0,
+          3.0,
+          3.0,
+          4.0,
+          4.0,
+          5.0,
+          6.0
+        ],
         "bins": 8
       },
-      "output_range": { "shannon": [0.0, "ln(bins)"], "relative": [0.0, 1.0] },
-      "tolerance": 1e-6,
+      "output_range": {
+        "shannon": [
+          0.0,
+          "ln(bins)"
+        ],
+        "relative": [
+          0.0,
+          1.0
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "shannon in [0, ln(bins)]; relative in [0, 1]; bin_count <= bins."
     },
     "volatility": {
       "input": {
-        "abs_log_returns": [0.01, 0.02, 0.015, 0.03, 0.012, 0.025, 0.018],
+        "abs_log_returns": [
+          0.01,
+          0.02,
+          0.015,
+          0.03,
+          0.012,
+          0.025,
+          0.018
+        ],
         "window": 5
       },
-      "output_range": { "rms": [0.0, 1.0] },
-      "tolerance": 1e-6,
+      "output_range": {
+        "rms": [
+          0.0,
+          1.0
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "Rolling RMS volatility sqrt(mean(r^2)) over the window, clamped to [0, 1]."
     },
     "signal_stats": {
       "input": {
-        "data": [1.0, 2.0, 3.0, 4.0, 5.0]
+        "data": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0
+        ]
       },
       "expected": {
         "mean": 3.0,
@@ -155,18 +286,41 @@
         "count": 5
       },
       "output_range": {
-        "mean": ["-Inf", "Inf"],
-        "variance": [0.0, "Inf"],
-        "skewness": ["-Inf", "Inf"],
-        "kurtosis": ["-Inf", "Inf"],
+        "mean": [
+          "-Inf",
+          "Inf"
+        ],
+        "variance": [
+          0.0,
+          "Inf"
+        ],
+        "skewness": [
+          "-Inf",
+          "Inf"
+        ],
+        "kurtosis": [
+          "-Inf",
+          "Inf"
+        ],
         "count": "data.len()"
       },
-      "tolerance": 1e-6,
+      "tolerance": 1e-06,
       "notes": "compute_signal_stats uses population moments (divide by n). kurtosis is excess (Fisher): (m4/n)/var^2 - 3. Empty input yields all zeros with count=0. Compare floats within tolerance 1e-6."
     },
     "signal_stats_skewed": {
       "input": {
-        "data": [1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 10.0]
+        "data": [
+          1.0,
+          2.0,
+          2.0,
+          3.0,
+          3.0,
+          3.0,
+          4.0,
+          4.0,
+          5.0,
+          10.0
+        ]
       },
       "expected": {
         "mean": 3.7,
@@ -176,12 +330,25 @@
         "count": 10
       },
       "output_range": {
-        "mean": ["-Inf", "Inf"],
-        "variance": [0.0, "Inf"],
-        "skewness": [0.0, "Inf"],
-        "count": 10
+        "mean": [
+          "-Inf",
+          "Inf"
+        ],
+        "variance": [
+          0.0,
+          "Inf"
+        ],
+        "skewness": [
+          0.0,
+          "Inf"
+        ],
+        "count": 10,
+        "kurtosis": [
+          "-Inf",
+          "Inf"
+        ]
       },
-      "tolerance": 1e-6,
+      "tolerance": 1e-06,
       "notes": "Right-skewed series; skewness > 0 and excess kurtosis > 0. Same algorithm and tolerance as signal_stats."
     }
   }

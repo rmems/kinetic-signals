@@ -63,7 +63,6 @@ fn assert_close(label: &str, got: f64, expected: f64) {
     );
 }
 
-
 #[test]
 fn fixture_documents_required_vector_keys() {
     // Assert the JSON documents every vector key exercised by this suite
