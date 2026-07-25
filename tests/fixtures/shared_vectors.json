@@ -49,20 +49,21 @@
     },
     "hawkes_streaming": {
       "input": {
-        "prev_intensity": 0.1,
-        "new_event_time": 0.51,
-        "last_event_time": 0.5,
+        "prev_intensity": 0.0,
+        "new_event_time": 0.0,
+        "last_event_time": 0.0,
         "params": {
           "mu": 0.1,
           "alpha": 0.5,
           "beta": 1.0,
           "dt": 0.001
         },
-        "decay_sum": 2.5
+        "decay_sum": 0.0
       },
       "expected": {
-        "intensity": 1.33756229218646,
-        "new_decay_sum": 3.47512458437292
+        "intensity": 0.1,
+        "new_decay_sum": 1.0,
+        "post_event_intensity": 0.6
       },
       "output_range": {
         "intensity": [
@@ -75,7 +76,7 @@
         ]
       },
       "tolerance": 1e-06,
-      "notes": "Single step of compute_hawkes_streaming. prev_intensity is unused by the algorithm. new_intensity = mu + alpha * decay_sum * exp(-beta * (new_event_time - last_event_time)); new_decay_sum = decayed_sum + 1.0. Compare expected within tolerance 1e-6."
+      "notes": "First event at t=0 with empty prior: pre-jump intensity is mu; decay becomes 1; post-event is mu+alpha."
     },
     "hawkes_streaming_sequence": {
       "input": {
@@ -102,20 +103,23 @@
           0.1,
           0.595024916874584,
           1.0851242535279617,
-          1.4847206757819063,
-          1.3633660501544487,
-          1.845820264794339,
-          2.3234739797901476
+          1.5703470203022158,
+          1.9371393847998861,
+          1.6666313800107653,
+          2.1460680542004718,
+          2.6207342537752445
         ],
         "decay_sums": [
           1.0,
           1.990049833749168,
           2.9702485070559232,
-          3.7694413515638123,
-          3.526732100308897,
-          4.491640529588677,
-          5.446947959580295
-        ]
+          3.9406940406044315,
+          4.674278769599772,
+          4.13326276002153,
+          5.092136108400943,
+          6.041468507550489
+        ],
+        "post_event_final_intensity": 3.1207342537752445
       },
       "output_range": {
         "intensities": [
@@ -129,7 +133,7 @@
         "length": "event_times.len() - 1"
       },
       "tolerance": 1e-06,
-      "notes": "Walk compute_hawkes_streaming over consecutive pairs of event_times starting with initial_decay_sum=0. Length of intensities/decay_sums is event_times.len()-1. Intensity at each step is mu + alpha * decayed previous sum (the new event is added to decay_sum after intensity is computed)."
+      "notes": "Walk compute_hawkes_streaming over every event including the first (first step uses last=t0 so dt=0). Each intensity is the pre-jump value returned by the API; decay_sums include the event just processed. post_event_final_intensity = mu + alpha * final_decay_sum matches batch compute_hawkes."
     },
     "surprise": {
       "input": {
@@ -172,33 +176,29 @@
         }
       },
       "expected": {
-        "results": [
+        "steps": [
           {
             "surprise": 0.0,
             "z_score": 0.0,
             "log_return": 0.0,
-            "expected_return": 0.0,
             "anomaly": false
           },
           {
             "surprise": 3.1465708968257626,
             "z_score": 3.1465708968257626,
             "log_return": 0.009950330853168092,
-            "expected_return": 0.0,
             "anomaly": true
           },
           {
             "surprise": 125.07275443799473,
             "z_score": 125.07275443799473,
             "log_return": 0.3955147772549963,
-            "expected_return": 0.0,
             "anomaly": true
           },
           {
             "surprise": 4.244731732831435,
             "z_score": -4.244731732831435,
-            "log_return": -0.013423020332140663,
-            "expected_return": 0.0,
+            "log_return": -0.013423020332140661,
             "anomaly": true
           }
         ]

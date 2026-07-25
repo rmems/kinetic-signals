@@ -2,316 +2,340 @@
 
 //! Golden-vector parity checks (issue #3 / LIM-31, issue #28 / LIM-201).
 //!
-//! This test pins the documented output-range convention and reference values
-//! for `kinetic-signals`. The canonical shared vectors and their expected
-//! ranges / reference outputs live in `tests/fixtures/shared_vectors.json`;
-//! the values below mirror that fixture so consumers can assert against
-//! identical inputs.
-//!
-//! These fixtures are the Rust-side golden set for determinism. SpikeStream.jl
-//! no longer implements Hurst/Hawkes/GBM proxies; any future binding parity
-//! should re-validate against the same JSON within the documented tolerances.
+//! Canonical shared vectors live in `tests/fixtures/shared_vectors.json`.
+//! Tests deserialize that fixture and assert against its values so Rust and
+//! any SpikeStream.jl (or future) consumer stay on one source of truth.
 
 use kinetic_signals::{
     VolEstimator, compute_hawkes, compute_hawkes_streaming, compute_hurst, compute_shannon_entropy,
     compute_signal_stats, compute_surprise, compute_surprise_sequence, detect_anomaly,
-    hawkes::HawkesParams, surprise::SurpriseParams,
+    hawkes::HawkesParams, surprise::SurpriseParams, surprise::SurpriseResult,
 };
+use serde_json::Value;
 
-const TOL: f64 = 1e-6;
-
-/// Fixture content — keeps tests honest about which keys the JSON documents.
+const DEFAULT_TOL: f64 = 1e-6;
 const SHARED_VECTORS_JSON: &str = include_str!("fixtures/shared_vectors.json");
 
-// Shared input vectors (mirror of tests/fixtures/shared_vectors.json).
-fn hurst_trending() -> Vec<f64> {
-    (0..64).map(|i| i as f64 * 0.1).collect()
+fn fixture() -> Value {
+    serde_json::from_str(SHARED_VECTORS_JSON).expect("shared_vectors.json must be valid JSON")
 }
 
-fn hawkes_events() -> Vec<f64> {
-    vec![0.0, 0.01, 0.02, 0.03, 0.1, 0.5, 0.51, 0.52]
+fn tol(v: &Value) -> f64 {
+    v.get("tolerance")
+        .and_then(|t| t.as_f64())
+        .unwrap_or(DEFAULT_TOL)
 }
 
-fn entropy_signal() -> Vec<f64> {
-    vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0]
+fn f64s(v: &Value) -> Vec<f64> {
+    v.as_array()
+        .expect("array of numbers")
+        .iter()
+        .map(|x| x.as_f64().expect("f64"))
+        .collect()
 }
 
-fn vol_returns() -> Vec<f32> {
-    vec![0.01, 0.02, 0.015, 0.03, 0.012, 0.025, 0.018]
+fn approx_eq(a: f64, b: f64, tolerance: f64) -> bool {
+    (a - b).abs() <= tolerance
 }
 
-fn surprise_sequence_values() -> Vec<f64> {
-    vec![100.0, 100.0, 101.0, 150.0, 148.0]
-}
-
-fn signal_stats_data() -> Vec<f64> {
-    vec![1.0, 2.0, 3.0, 4.0, 5.0]
-}
-
-fn signal_stats_skewed_data() -> Vec<f64> {
-    vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 10.0]
-}
-
-fn approx_eq(a: f64, b: f64, tol: f64) -> bool {
-    (a - b).abs() <= tol
-}
-
-fn assert_close(label: &str, got: f64, expected: f64) {
+fn assert_close(label: &str, got: f64, expected: f64, tolerance: f64) {
     assert!(
-        approx_eq(got, expected, TOL),
-        "{label}: got {got} expected {expected}"
+        approx_eq(got, expected, tolerance),
+        "{label}: got {got} expected {expected} (tol={tolerance})"
     );
 }
 
+fn assert_series(label: &str, got: &[f64], expected: &[f64], tolerance: f64) {
+    assert_eq!(got.len(), expected.len(), "{label} length mismatch");
+    for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
+        assert_close(&format!("{label}[{i}]"), g, e, tolerance);
+    }
+}
+
+struct HawkesWalk {
+    intensities: Vec<f64>,
+    decay_sums: Vec<f64>,
+}
+
+/// Process every event, including the first (seed last=t0 so dt=0).
+fn walk_hawkes_streaming(events: &[f64], params: &HawkesParams) -> HawkesWalk {
+    assert!(!events.is_empty());
+    let mut decay_sum = 0.0;
+    let mut last = events[0];
+    let mut intensities = Vec::with_capacity(events.len());
+    let mut decay_sums = Vec::with_capacity(events.len());
+    for (i, &t) in events.iter().enumerate() {
+        let last_for_step = if i == 0 { t } else { last };
+        let prior = if i == 0 { 0.0 } else { decay_sum };
+        let (intensity, new_decay) = compute_hawkes_streaming(0.0, t, last_for_step, params, prior);
+        intensities.push(intensity);
+        decay_sums.push(new_decay);
+        decay_sum = new_decay;
+        last = t;
+    }
+    HawkesWalk {
+        intensities,
+        decay_sums,
+    }
+}
+
+struct SurpriseExpect {
+    surprise: f64,
+    z_score: f64,
+    log_return: f64,
+    anomaly: bool,
+}
+
+fn assert_surprise_step(
+    step: usize,
+    result: &SurpriseResult,
+    params: &SurpriseParams,
+    expected: &SurpriseExpect,
+    tolerance: f64,
+) {
+    assert_close(
+        &format!("surprise[{step}]"),
+        result.surprise,
+        expected.surprise,
+        tolerance,
+    );
+    assert_close(
+        &format!("z_score[{step}]"),
+        result.z_score,
+        expected.z_score,
+        tolerance,
+    );
+    assert_close(
+        &format!("log_return[{step}]"),
+        result.log_return,
+        expected.log_return,
+        tolerance,
+    );
+    assert!(result.surprise >= 0.0);
+    assert_eq!(result.surprise, result.z_score.abs());
+    assert_eq!(detect_anomaly(result, params), expected.anomaly);
+}
+
+fn params_from_json(v: &Value) -> HawkesParams {
+    HawkesParams {
+        mu: v["mu"].as_f64().unwrap_or(0.1),
+        alpha: v["alpha"].as_f64().unwrap_or(0.5),
+        beta: v["beta"].as_f64().unwrap_or(1.0),
+        dt: v["dt"].as_f64().unwrap_or(0.001),
+    }
+}
+
+fn surprise_params_from_json(v: &Value) -> SurpriseParams {
+    SurpriseParams {
+        mu: v["mu"].as_f64().unwrap_or(0.0),
+        sigma: v["sigma"].as_f64().unwrap_or(0.15),
+        dt: v["dt"].as_f64().unwrap_or(0.001),
+        threshold: v["threshold"].as_f64().unwrap_or(3.0),
+    }
+}
+
 #[test]
-fn fixture_documents_required_vector_keys() {
-    // Assert the JSON documents every vector key exercised by this suite
-    // (batch + streaming expansions from GH#28 / LIM-201).
+fn fixture_parses_and_documents_required_vector_keys() {
+    let root = fixture();
+    let vectors = root["vectors"].as_object().expect("vectors object");
     for key in [
-        "\"hurst\"",
-        "\"hawkes\"",
-        "\"hawkes_streaming\"",
-        "\"hawkes_streaming_sequence\"",
-        "\"surprise\"",
-        "\"surprise_sequence\"",
-        "\"entropy\"",
-        "\"volatility\"",
-        "\"signal_stats\"",
-        "\"signal_stats_skewed\"",
-        "\"tolerance\"",
+        "hurst",
+        "hawkes",
+        "hawkes_streaming",
+        "hawkes_streaming_sequence",
+        "surprise",
+        "surprise_sequence",
+        "entropy",
+        "volatility",
+        "signal_stats",
+        "signal_stats_skewed",
     ] {
         assert!(
-            SHARED_VECTORS_JSON.contains(key),
-            "shared_vectors.json missing key {key}"
+            vectors.contains_key(key),
+            "shared_vectors.json missing vectors.{key}"
         );
     }
 }
 
 #[test]
 fn hurst_within_unit_interval() {
-    let r = compute_hurst(&hurst_trending());
+    let data: Vec<f64> = (0..64).map(|i| i as f64 * 0.1).collect();
+    let r = compute_hurst(&data);
     assert!(r.h.is_finite());
     assert!((0.0..=1.0).contains(&r.h), "hurst H out of [0,1]: {}", r.h);
-    // Deterministic.
-    let r2 = compute_hurst(&hurst_trending());
-    assert!((r.h - r2.h).abs() < TOL);
+    let r2 = compute_hurst(&data);
+    assert!((r.h - r2.h).abs() < DEFAULT_TOL);
 }
 
 #[test]
 fn hawkes_intensity_at_least_baseline() {
+    let events = vec![0.0, 0.01, 0.02, 0.03, 0.1, 0.5, 0.51, 0.52];
     let params = HawkesParams::default();
-    let r = compute_hawkes(&hawkes_events(), &params);
+    let r = compute_hawkes(&events, &params);
     assert!(r.intensity.is_finite());
-    assert!(
-        r.intensity >= params.mu,
-        "intensity {} below baseline mu {}",
-        r.intensity,
-        params.mu
-    );
+    assert!(r.intensity >= params.mu);
     assert!(r.avg_excitation >= 0.0);
-    assert_eq!(r.event_count, hawkes_events().len());
+    assert_eq!(r.event_count, events.len());
 }
 
 #[test]
-fn hawkes_streaming_single_step_matches_expected() {
-    // Mirror of vectors.hawkes_streaming in shared_vectors.json.
-    let params = HawkesParams {
-        mu: 0.1,
-        alpha: 0.5,
-        beta: 1.0,
-        dt: 0.001,
-    };
-    let (intensity, new_decay_sum) = compute_hawkes_streaming(0.1, 0.51, 0.5, &params, 2.5);
-
-    assert!(intensity.is_finite() && new_decay_sum.is_finite());
-    assert!(
-        intensity >= params.mu,
-        "streaming intensity {intensity} below mu {}",
-        params.mu
+fn hawkes_streaming_single_step_matches_fixture() {
+    let root = fixture();
+    let v = &root["vectors"]["hawkes_streaming"];
+    let tolerance = tol(v);
+    let input = &v["input"];
+    let params = params_from_json(&input["params"]);
+    let (intensity, new_decay) = compute_hawkes_streaming(
+        input["prev_intensity"].as_f64().unwrap(),
+        input["new_event_time"].as_f64().unwrap(),
+        input["last_event_time"].as_f64().unwrap(),
+        &params,
+        input["decay_sum"].as_f64().unwrap(),
     );
-    assert!(new_decay_sum >= 0.0);
-    assert!(
-        approx_eq(intensity, 1.33756229218646, TOL),
-        "intensity {intensity} != expected"
+    let exp = &v["expected"];
+    assert_close(
+        "intensity",
+        intensity,
+        exp["intensity"].as_f64().unwrap(),
+        tolerance,
     );
-    assert!(
-        approx_eq(new_decay_sum, 3.47512458437292, TOL),
-        "new_decay_sum {new_decay_sum} != expected"
+    assert_close(
+        "new_decay_sum",
+        new_decay,
+        exp["new_decay_sum"].as_f64().unwrap(),
+        tolerance,
     );
-}
-
-fn walk_hawkes_streaming(events: &[f64], params: &HawkesParams) -> (Vec<f64>, Vec<f64>) {
-    let mut decay_sum = 0.0;
-    let mut last = events[0];
-    let mut intensities = Vec::new();
-    let mut decay_sums = Vec::new();
-    for &t in &events[1..] {
-        let (intensity, new_decay) = compute_hawkes_streaming(0.0, t, last, params, decay_sum);
-        intensities.push(intensity);
-        decay_sums.push(new_decay);
-        decay_sum = new_decay;
-        last = t;
-    }
-    (intensities, decay_sums)
-}
-
-fn assert_series_matches(label: &str, got: &[f64], expected: &[f64], min_ok: f64) {
-    assert_eq!(got.len(), expected.len());
-    for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert!(approx_eq(g, e, TOL), "{label}[{i}]: got {g}, expected {e}");
-        assert!(g >= min_ok);
+    if let Some(post) = exp.get("post_event_intensity").and_then(|x| x.as_f64()) {
+        let post_got = params.mu + params.alpha * new_decay;
+        assert_close("post_event_intensity", post_got, post, tolerance);
     }
 }
 
 #[test]
-fn hawkes_streaming_sequence_matches_expected() {
-    // Mirror of vectors.hawkes_streaming_sequence in shared_vectors.json.
-    let params = HawkesParams::default();
-    let events = hawkes_events();
-    let expected_intensities = [
-        0.1,
-        0.595024916874584,
-        1.0851242535279617,
-        1.4847206757819063,
-        1.3633660501544487,
-        1.845820264794339,
-        2.3234739797901476,
-    ];
-    let expected_decay_sums = [
-        1.0,
-        1.990049833749168,
-        2.9702485070559233,
-        3.7694413515638123,
-        3.526732100308897,
-        4.491640529588677,
-        5.446947959580295,
-    ];
-
-    let (intensities, decay_sums) = walk_hawkes_streaming(&events, &params);
-    assert_eq!(intensities.len(), events.len() - 1);
-    assert_series_matches("intensity", &intensities, &expected_intensities, params.mu);
-    assert_series_matches("decay_sum", &decay_sums, &expected_decay_sums, 0.0);
+fn hawkes_streaming_sequence_matches_fixture() {
+    let root = fixture();
+    let v = &root["vectors"]["hawkes_streaming_sequence"];
+    let tolerance = tol(v);
+    let events = f64s(&v["input"]["event_times"]);
+    let params = params_from_json(v["input"].get("params").unwrap_or(&Value::Null));
+    let walk = walk_hawkes_streaming(&events, &params);
+    let exp = &v["expected"];
+    assert_series(
+        "intensity",
+        &walk.intensities,
+        &f64s(&exp["intensities"]),
+        tolerance,
+    );
+    assert_series(
+        "decay_sum",
+        &walk.decay_sums,
+        &f64s(&exp["decay_sums"]),
+        tolerance,
+    );
+    // Final post-event intensity matches batch over the same events.
+    let post = params.mu + params.alpha * walk.decay_sums.last().copied().unwrap_or(0.0);
+    let batch = compute_hawkes(&events, &params);
+    assert_close("batch_vs_stream_post", post, batch.intensity, tolerance);
+    if let Some(e) = exp
+        .get("post_event_final_intensity")
+        .and_then(|x| x.as_f64())
+    {
+        assert_close("post_event_final", post, e, tolerance);
+    }
 }
 
 #[test]
 fn surprise_is_nonnegative_and_anomaly_consistent() {
     let params = SurpriseParams::<f64>::default();
-
     let calm = compute_surprise(100.0, 100.0, &params);
     assert!(calm.surprise.is_finite() && calm.surprise >= 0.0);
     assert!(calm.surprise <= params.threshold);
-
     let spike = compute_surprise(150.0, 100.0, &params);
     assert!(spike.surprise >= 0.0);
     assert_eq!(spike.surprise, spike.z_score.abs());
-    assert!(
-        spike.surprise > params.threshold,
-        "spike should be anomalous"
-    );
-}
-
-fn assert_surprise_step(
-    i: usize,
-    r: &kinetic_signals::SurpriseResult<f64>,
-    params: &SurpriseParams<f64>,
-    exp_s: f64,
-    exp_z: f64,
-    exp_lr: f64,
-    exp_anom: bool,
-) {
-    assert_close(&format!("surprise[{i}]"), r.surprise, exp_s);
-    assert_close(&format!("z_score[{i}]"), r.z_score, exp_z);
-    assert_close(&format!("log_return[{i}]"), r.log_return, exp_lr);
-    assert!(r.surprise >= 0.0);
-    assert_eq!(r.surprise, r.z_score.abs());
-    assert_eq!(detect_anomaly(r, params), exp_anom);
+    assert!(spike.surprise > params.threshold);
 }
 
 #[test]
-fn surprise_sequence_matches_expected() {
-    // Mirror of vectors.surprise_sequence in shared_vectors.json.
-    let params = SurpriseParams::<f64>::default();
-    let values = surprise_sequence_values();
+fn surprise_sequence_matches_fixture() {
+    let root = fixture();
+    let v = &root["vectors"]["surprise_sequence"];
+    let tolerance = tol(v);
+    let values = f64s(&v["input"]["values"]);
+    let params = surprise_params_from_json(&v["input"]["params"]);
     let results = compute_surprise_sequence(&values, &params);
     assert_eq!(results.len(), values.len() - 1);
 
-    let expected = [
-        (0.0, 0.0, 0.0, false),
-        (
-            3.1465708968257626,
-            3.1465708968257626,
-            0.009950330853168092,
-            true,
-        ),
-        (
-            125.07275443799473,
-            125.07275443799473,
-            0.3955147772549963,
-            true,
-        ),
-        (
-            4.244731732831435,
-            -4.244731732831435,
-            -0.013423020332140663,
-            true,
-        ),
-    ];
-    for (i, r) in results.iter().enumerate() {
-        let (s, z, lr, anom) = expected[i];
-        assert_surprise_step(i, r, &params, s, z, lr, anom);
+    let steps = v["expected"]["steps"]
+        .as_array()
+        .expect("expected.steps array");
+    assert_eq!(results.len(), steps.len());
+    for (i, (r, step)) in results.iter().zip(steps.iter()).enumerate() {
+        let expected = SurpriseExpect {
+            surprise: step["surprise"].as_f64().unwrap(),
+            z_score: step["z_score"].as_f64().unwrap(),
+            log_return: step["log_return"].as_f64().unwrap(),
+            anomaly: step["anomaly"].as_bool().unwrap(),
+        };
+        assert_surprise_step(i, r, &params, &expected, tolerance);
     }
 }
 
 #[test]
 fn surprise_sequence_short_input_empty() {
     let params = SurpriseParams::<f64>::default();
-    let values = surprise_sequence_values();
-    assert!(compute_surprise_sequence(&values[..1], &params).is_empty());
+    assert!(compute_surprise_sequence(&[100.0], &params).is_empty());
 }
 
 #[test]
 fn entropy_within_bounds() {
     let bins = 8;
-    let r = compute_shannon_entropy(&entropy_signal(), bins);
+    let signal = vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0];
+    let r = compute_shannon_entropy(&signal, bins);
     let max_entropy = (bins as f64).ln();
-    assert!(r.shannon >= 0.0 && r.shannon <= max_entropy + TOL);
-    assert!((0.0..=1.0 + TOL).contains(&r.relative));
+    assert!(r.shannon >= 0.0 && r.shannon <= max_entropy + DEFAULT_TOL);
+    assert!((0.0..=1.0 + DEFAULT_TOL).contains(&r.relative));
     assert!(r.bin_count <= bins);
 }
 
 #[test]
 fn volatility_rms_nonnegative() {
     let mut est = VolEstimator::new(5);
-    for &x in &vol_returns() {
+    for &x in &[0.01_f32, 0.02, 0.015, 0.03, 0.012, 0.025, 0.018] {
         est.push(x);
     }
     let rms = est.rms();
-    assert!(rms >= 0.0, "rms must be non-negative: {rms}");
-    assert!(rms.is_finite());
+    assert!(rms >= 0.0 && rms.is_finite());
 }
 
 #[test]
-fn signal_stats_matches_expected() {
-    // Mirror of vectors.signal_stats in shared_vectors.json.
-    let stats = compute_signal_stats(&signal_stats_data());
-    assert_eq!(stats.count, 5);
-    assert!(approx_eq(stats.mean, 3.0, TOL), "mean {}", stats.mean);
-    assert!(
-        approx_eq(stats.variance, 2.0, TOL),
-        "variance {}",
-        stats.variance
+fn signal_stats_matches_fixture() {
+    let root = fixture();
+    let v = &root["vectors"]["signal_stats"];
+    let tolerance = tol(v);
+    let data = f64s(&v["input"]["data"]);
+    let stats = compute_signal_stats(&data);
+    let exp = &v["expected"];
+    assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
+    assert_close("mean", stats.mean, exp["mean"].as_f64().unwrap(), tolerance);
+    assert_close(
+        "variance",
+        stats.variance,
+        exp["variance"].as_f64().unwrap(),
+        tolerance,
     );
-    assert!(
-        approx_eq(stats.skewness, 0.0, TOL),
-        "skewness {}",
-        stats.skewness
+    assert_close(
+        "skewness",
+        stats.skewness,
+        exp["skewness"].as_f64().unwrap(),
+        tolerance,
     );
-    assert!(
-        approx_eq(stats.kurtosis, -1.3, TOL),
-        "kurtosis {}",
-        stats.kurtosis
+    assert_close(
+        "kurtosis",
+        stats.kurtosis,
+        exp["kurtosis"].as_f64().unwrap(),
+        tolerance,
     );
-    assert!(stats.variance >= 0.0);
 }
 
 #[test]
@@ -323,11 +347,31 @@ fn signal_stats_empty_is_zero() {
 }
 
 #[test]
-fn signal_stats_skewed_matches_expected() {
-    let stats = compute_signal_stats(&signal_stats_skewed_data());
-    assert_eq!(stats.count, 10);
-    assert_close("mean", stats.mean, 3.7);
-    assert_close("variance", stats.variance, 5.61);
-    assert_close("skewness", stats.skewness, 1.668_933_072_816_136_7);
-    assert_close("kurtosis", stats.kurtosis, 2.238_725_728_502_387);
+fn signal_stats_skewed_matches_fixture() {
+    let root = fixture();
+    let v = &root["vectors"]["signal_stats_skewed"];
+    let tolerance = tol(v);
+    let data = f64s(&v["input"]["data"]);
+    let stats = compute_signal_stats(&data);
+    let exp = &v["expected"];
+    assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
+    assert_close("mean", stats.mean, exp["mean"].as_f64().unwrap(), tolerance);
+    assert_close(
+        "variance",
+        stats.variance,
+        exp["variance"].as_f64().unwrap(),
+        tolerance,
+    );
+    assert_close(
+        "skewness",
+        stats.skewness,
+        exp["skewness"].as_f64().unwrap(),
+        tolerance,
+    );
+    assert_close(
+        "kurtosis",
+        stats.kurtosis,
+        exp["kurtosis"].as_f64().unwrap(),
+        tolerance,
+    );
 }
