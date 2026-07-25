@@ -130,10 +130,10 @@
           0.0,
           "Inf"
         ],
-        "length": "event_times.len() - 1"
+        "length": "event_times.len()"
       },
       "tolerance": 1e-06,
-      "notes": "Walk compute_hawkes_streaming over every event including the first (first step uses last=t0 so dt=0). Each intensity is the pre-jump value returned by the API; decay_sums include the event just processed. post_event_final_intensity = mu + alpha * final_decay_sum matches batch compute_hawkes."
+      "notes": "Walk compute_hawkes_streaming over every event including the first (first step uses last=t0 so dt=0). Each intensity is the pre-jump value returned by the API; decay_sums include the event just processed. Result length equals event_times.len(). post_event_final_intensity = mu + alpha * final_decay_sum matches batch compute_hawkes."
     },
     "surprise": {
       "input": {
@@ -181,24 +181,28 @@
             "surprise": 0.0,
             "z_score": 0.0,
             "log_return": 0.0,
+            "expected_return": 0.0,
             "anomaly": false
           },
           {
             "surprise": 3.1465708968257626,
             "z_score": 3.1465708968257626,
             "log_return": 0.009950330853168092,
+            "expected_return": 0.0,
             "anomaly": true
           },
           {
             "surprise": 125.07275443799473,
             "z_score": 125.07275443799473,
             "log_return": 0.3955147772549963,
+            "expected_return": 0.0,
             "anomaly": true
           },
           {
             "surprise": 4.244731732831435,
             "z_score": -4.244731732831435,
             "log_return": -0.013423020332140661,
+            "expected_return": 0.0,
             "anomaly": true
           }
         ]
@@ -212,10 +216,80 @@
           "-Inf",
           "Inf"
         ],
+        "expected_return": [
+          "-Inf",
+          "Inf"
+        ],
         "length": "values.len() - 1"
       },
       "tolerance": 1e-06,
-      "notes": "compute_surprise_sequence yields one SurpriseResult per consecutive pair (len = values.len()-1). anomaly = surprise > threshold. Empty/short inputs (<2) yield []. Compare floats within tolerance 1e-6."
+      "notes": "compute_surprise_sequence yields one SurpriseResult per consecutive pair (len = values.len()-1). expected_return = mu * dt (0 here). anomaly = surprise > threshold. Empty/short inputs (<2) yield []. Compare floats within tolerance 1e-6."
+    },
+    "surprise_sequence_drift": {
+      "input": {
+        "values": [
+          100.0,
+          100.0,
+          101.0,
+          150.0,
+          148.0
+        ],
+        "params": {
+          "mu": 0.5,
+          "sigma": 0.1,
+          "dt": 0.001,
+          "threshold": 3.0
+        }
+      },
+      "expected": {
+        "steps": [
+          {
+            "surprise": 0.15811388300841897,
+            "z_score": -0.15811388300841897,
+            "log_return": 0.0,
+            "expected_return": 0.0005,
+            "anomaly": false
+          },
+          {
+            "surprise": 2.9884570138173436,
+            "z_score": 2.9884570138173436,
+            "log_return": 0.009950330853168092,
+            "expected_return": 0.0005,
+            "anomaly": false
+          },
+          {
+            "surprise": 124.91464055498632,
+            "z_score": 124.91464055498632,
+            "log_return": 0.3955147772549963,
+            "expected_return": 0.0005,
+            "anomaly": true
+          },
+          {
+            "surprise": 4.402845615839854,
+            "z_score": -4.402845615839854,
+            "log_return": -0.013423020332140661,
+            "expected_return": 0.0005,
+            "anomaly": true
+          }
+        ]
+      },
+      "output_range": {
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ],
+        "expected_return": [
+          "-Inf",
+          "Inf"
+        ],
+        "length": "values.len() - 1"
+      },
+      "tolerance": 1e-06,
+      "notes": "Nonzero drift: expected_return = mu * dt = 0.5 * 0.001 = 0.0005 on every step. z_score uses (log_return - expected_return) / (sigma * sqrt(dt))."
     },
     "entropy": {
       "input": {

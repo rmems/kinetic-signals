@@ -108,6 +108,7 @@ struct SurpriseExpect {
     surprise: f64,
     z_score: f64,
     log_return: f64,
+    expected_return: f64,
     anomaly: bool,
 }
 
@@ -124,6 +125,7 @@ fn assert_surprise_step(check: SurpriseStepCheck<'_>) {
     let label_s = format!("surprise[{step}]");
     let label_z = format!("z_score[{step}]");
     let label_lr = format!("log_return[{step}]");
+    let label_er = format!("expected_return[{step}]");
     assert_close(CloseCheck {
         label: &label_s,
         got: check.result.surprise,
@@ -142,12 +144,58 @@ fn assert_surprise_step(check: SurpriseStepCheck<'_>) {
         expected: check.expected.log_return,
         tolerance: check.tolerance,
     });
+    assert_close(CloseCheck {
+        label: &label_er,
+        got: check.result.expected_return,
+        expected: check.expected.expected_return,
+        tolerance: check.tolerance,
+    });
+    assert_close(CloseCheck {
+        label: &format!("mu_dt[{step}]"),
+        got: check.result.expected_return,
+        expected: check.params.mu * check.params.dt,
+        tolerance: check.tolerance,
+    });
     assert!(check.result.surprise >= 0.0);
     assert_eq!(check.result.surprise, check.result.z_score.abs());
     assert_eq!(
         detect_anomaly(check.result, check.params),
         check.expected.anomaly
     );
+}
+
+fn expect_from_step(step: &Value) -> SurpriseExpect {
+    SurpriseExpect {
+        surprise: step["surprise"].as_f64().unwrap(),
+        z_score: step["z_score"].as_f64().unwrap(),
+        log_return: step["log_return"].as_f64().unwrap(),
+        expected_return: step["expected_return"].as_f64().unwrap(),
+        anomaly: step["anomaly"].as_bool().unwrap(),
+    }
+}
+
+fn assert_surprise_fixture(vector_key: &str) {
+    let root = fixture();
+    let v = &root["vectors"][vector_key];
+    let tolerance = tol(v);
+    let values = f64s(&v["input"]["values"]);
+    let params = surprise_params_from_json(&v["input"]["params"]);
+    let results = compute_surprise_sequence(&values, &params);
+    assert_eq!(results.len(), values.len() - 1);
+
+    let steps = v["expected"]["steps"]
+        .as_array()
+        .expect("expected.steps array");
+    assert_eq!(results.len(), steps.len());
+    for (i, (r, step)) in results.iter().zip(steps.iter()).enumerate() {
+        assert_surprise_step(SurpriseStepCheck {
+            step: i,
+            result: r,
+            params: &params,
+            expected: expect_from_step(step),
+            tolerance,
+        });
+    }
 }
 
 fn params_from_json(v: &Value) -> HawkesParams {
@@ -179,6 +227,7 @@ fn fixture_parses_and_documents_required_vector_keys() {
         "hawkes_streaming_sequence",
         "surprise",
         "surprise_sequence",
+        "surprise_sequence_drift",
         "entropy",
         "volatility",
         "signal_stats",
@@ -306,33 +355,12 @@ fn surprise_is_nonnegative_and_anomaly_consistent() {
 
 #[test]
 fn surprise_sequence_matches_fixture() {
-    let root = fixture();
-    let v = &root["vectors"]["surprise_sequence"];
-    let tolerance = tol(v);
-    let values = f64s(&v["input"]["values"]);
-    let params = surprise_params_from_json(&v["input"]["params"]);
-    let results = compute_surprise_sequence(&values, &params);
-    assert_eq!(results.len(), values.len() - 1);
+    assert_surprise_fixture("surprise_sequence");
+}
 
-    let steps = v["expected"]["steps"]
-        .as_array()
-        .expect("expected.steps array");
-    assert_eq!(results.len(), steps.len());
-    for (i, (r, step)) in results.iter().zip(steps.iter()).enumerate() {
-        let expected = SurpriseExpect {
-            surprise: step["surprise"].as_f64().unwrap(),
-            z_score: step["z_score"].as_f64().unwrap(),
-            log_return: step["log_return"].as_f64().unwrap(),
-            anomaly: step["anomaly"].as_bool().unwrap(),
-        };
-        assert_surprise_step(SurpriseStepCheck {
-            step: i,
-            result: r,
-            params: &params,
-            expected,
-            tolerance,
-        });
-    }
+#[test]
+fn surprise_sequence_drift_matches_fixture() {
+    assert_surprise_fixture("surprise_sequence_drift");
 }
 
 #[test]
