@@ -20,16 +20,16 @@ fn fixture() -> Value {
 }
 
 fn root_tolerance() -> f64 {
-    fixture()
-        .get("tolerance")
-        .and_then(|t| t.as_f64())
-        .unwrap_or_else(|| panic!("fixture missing or non-numeric root `tolerance`"))
+    require_f64(&fixture(), "tolerance")
 }
 
 fn tol(v: &Value) -> f64 {
-    v.get("tolerance")
-        .and_then(|t| t.as_f64())
-        .unwrap_or_else(root_tolerance)
+    match v.get("tolerance") {
+        None => root_tolerance(),
+        Some(t) => t
+            .as_f64()
+            .unwrap_or_else(|| panic!("fixture vector `tolerance` must be numeric")),
+    }
 }
 
 fn f64s(v: &Value) -> Vec<f64> {
@@ -234,6 +234,7 @@ fn surprise_params_from_json(v: &Value) -> SurpriseParams {
 #[test]
 fn fixture_parses_and_documents_required_vector_keys() {
     let root = fixture();
+    let _root_tol = root_tolerance();
     let vectors = root["vectors"].as_object().expect("vectors object");
     for key in [
         "hurst",
@@ -331,7 +332,7 @@ fn hawkes_streaming_sequence_matches_fixture() {
     let tolerance = tol(v);
     let events = f64s(&v["input"]["event_times"]);
     let params = params_from_json(v["input"].get("params").unwrap_or(&Value::Null));
-    let initial_decay = v["input"]["initial_decay_sum"].as_f64().unwrap_or(0.0);
+    let initial_decay = require_f64(&v["input"], "initial_decay_sum");
     let walk = walk_hawkes_streaming(&events, &params, initial_decay);
     let exp = &v["expected"];
     assert_series(SeriesCheck {
