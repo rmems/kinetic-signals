@@ -16,10 +16,6 @@ struct HawkesWalk {
     decay_sums: Vec<f64>,
 }
 
-/// Walk streaming Hawkes over `events`.
-///
-/// `initial_last_event_time`: when `Some`, used as `last_event_time` for the first
-/// step (stream resume). When `None`, the first event is seeded with dt=0.
 fn walk_hawkes_streaming(
     events: &[f64],
     params: &HawkesParams,

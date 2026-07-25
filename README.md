@@ -153,9 +153,19 @@ convention and a shared test-vector file at
 | Entropy      | `relative`  | `[0, 1]`         |
 | Volatility   | `rms`       | `[0, 1]`         |
 
-The Rust side is verified by `tests/cross_language_ranges.rs`
-(`cargo test --test cross_language_ranges`). The Julia side must be validated
-in `SpikeStream.jl` against the same `shared_vectors.json` within the documented
+The Rust side is verified by integration tests that load
+`tests/fixtures/shared_vectors.json`:
+
+```bash
+cargo test \
+  --test cross_language_ranges \
+  --test hawkes_fixture_vectors \
+  --test surprise_fixture_vectors \
+  --test stats_fixture_vectors
+```
+
+(`cargo test` alone also runs them.) The Julia side must be validated in
+`SpikeStream.jl` against the same `shared_vectors.json` within the documented
 tolerance.
 
 ## Scope and ownership boundaries
