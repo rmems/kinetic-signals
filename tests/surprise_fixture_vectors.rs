@@ -105,6 +105,14 @@ fn assert_surprise_fixture(vector_key: &str) {
         .as_array()
         .expect("expected.steps array");
     assert_eq!(results.len(), steps.len());
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: None,
+            bins: None,
+        },
+        tolerance,
+    };
     for (i, (r, step)) in results.iter().zip(steps.iter()).enumerate() {
         assert_surprise_step(SurpriseStepCheck {
             step: i,
@@ -113,6 +121,9 @@ fn assert_surprise_fixture(vector_key: &str) {
             expected: expect_from_step(step),
             tolerance,
         });
+        assert_field_in_output_range(&rc, "surprise", r.surprise);
+        assert_field_in_output_range(&rc, "z_score", r.z_score);
+        assert_field_in_output_range(&rc, "expected_return", r.expected_return);
     }
 }
 

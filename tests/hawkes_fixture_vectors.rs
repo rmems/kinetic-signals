@@ -6,8 +6,8 @@ mod common;
 
 use common::{
     BoundCtx, CloseCheck, OutputRangeCtx, SeriesCheck, SizeCtx, assert_close,
-    assert_field_in_output_range, assert_series, f64s, fixture, params_from_json,
-    parse_size_contract, require_f64, tol,
+    assert_field_in_output_range, assert_series, assert_series_in_output_range, f64s, fixture,
+    params_from_json, parse_size_contract, require_f64, tol,
 };
 use kinetic_signals::{compute_hawkes, compute_hawkes_streaming, hawkes::HawkesParams};
 
@@ -170,6 +170,16 @@ fn assert_hawkes_sequence_fixture(vector_key: &str) {
         initial_decay,
         tolerance,
     });
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: Some(params.mu),
+            bins: None,
+        },
+        tolerance,
+    };
+    assert_series_in_output_range(&rc, "intensities", &walk.intensities);
+    assert_series_in_output_range(&rc, "decay_sums", &walk.decay_sums);
 }
 
 #[test]

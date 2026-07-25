@@ -158,6 +158,12 @@ pub fn assert_field_in_output_range(rc: &OutputRangeCtx<'_>, field: &str, got: f
     });
 }
 
+pub fn assert_series_in_output_range(rc: &OutputRangeCtx<'_>, field: &str, values: &[f64]) {
+    for &got in values {
+        assert_field_in_output_range(rc, field, got);
+    }
+}
+
 pub struct SizeCtx {
     pub event_times: Option<usize>,
     pub values: Option<usize>,
