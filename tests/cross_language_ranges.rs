@@ -246,18 +246,28 @@ fn fixture_parses_and_documents_required_vector_keys() {
 
 #[test]
 fn hurst_within_unit_interval() {
-    let data: Vec<f64> = (0..64).map(|i| i as f64 * 0.1).collect();
+    let root = fixture();
+    let v = &root["vectors"]["hurst"];
+    let data = f64s(&v["input"]["data"]);
+    let tolerance = tol(v);
     let r = compute_hurst(&data);
     assert!(r.h.is_finite());
     assert!((0.0..=1.0).contains(&r.h), "hurst H out of [0,1]: {}", r.h);
     let r2 = compute_hurst(&data);
-    assert!((r.h - r2.h).abs() < DEFAULT_TOL);
+    assert_close(CloseCheck {
+        label: "hurst_deterministic",
+        got: r.h,
+        expected: r2.h,
+        tolerance,
+    });
 }
 
 #[test]
 fn hawkes_intensity_at_least_baseline() {
-    let events = vec![0.0, 0.01, 0.02, 0.03, 0.1, 0.5, 0.51, 0.52];
-    let params = HawkesParams::default();
+    let root = fixture();
+    let v = &root["vectors"]["hawkes"];
+    let events = f64s(&v["input"]["event_times"]);
+    let params = params_from_json(&v["input"]["params"]);
     let r = compute_hawkes(&events, &params);
     assert!(r.intensity.is_finite());
     assert!(r.intensity >= params.mu);
@@ -351,11 +361,16 @@ fn hawkes_streaming_sequence_matches_fixture() {
 
 #[test]
 fn surprise_is_nonnegative_and_anomaly_consistent() {
-    let params = SurpriseParams::<f64>::default();
-    let calm = compute_surprise(100.0, 100.0, &params);
+    let root = fixture();
+    let v = &root["vectors"]["surprise"];
+    let input = &v["input"];
+    let params = surprise_params_from_json(&input["params"]);
+    let prev = input["previous_value"].as_f64().unwrap();
+    let curr = input["current_value"].as_f64().unwrap();
+    let calm = compute_surprise(prev, prev, &params);
     assert!(calm.surprise.is_finite() && calm.surprise >= 0.0);
     assert!(calm.surprise <= params.threshold);
-    let spike = compute_surprise(150.0, 100.0, &params);
+    let spike = compute_surprise(curr, prev, &params);
     assert!(spike.surprise >= 0.0);
     assert_eq!(spike.surprise, spike.z_score.abs());
     assert!(spike.surprise > params.threshold);
@@ -379,20 +394,27 @@ fn surprise_sequence_short_input_empty() {
 
 #[test]
 fn entropy_within_bounds() {
-    let bins = 8;
-    let signal = vec![1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0];
+    let root = fixture();
+    let v = &root["vectors"]["entropy"];
+    let signal = f64s(&v["input"]["data"]);
+    let bins = v["input"]["bins"].as_u64().unwrap() as usize;
+    let tolerance = tol(v);
     let r = compute_shannon_entropy(&signal, bins);
     let max_entropy = (bins as f64).ln();
-    assert!(r.shannon >= 0.0 && r.shannon <= max_entropy + DEFAULT_TOL);
-    assert!((0.0..=1.0 + DEFAULT_TOL).contains(&r.relative));
+    assert!(r.shannon >= 0.0 && r.shannon <= max_entropy + tolerance);
+    assert!((0.0..=1.0 + tolerance).contains(&r.relative));
     assert!(r.bin_count <= bins);
 }
 
 #[test]
 fn volatility_rms_nonnegative() {
-    let mut est = VolEstimator::new(5);
-    for &x in &[0.01_f32, 0.02, 0.015, 0.03, 0.012, 0.025, 0.018] {
-        est.push(x);
+    let root = fixture();
+    let v = &root["vectors"]["volatility"];
+    let returns = f64s(&v["input"]["abs_log_returns"]);
+    let window = v["input"]["window"].as_u64().unwrap() as usize;
+    let mut est = VolEstimator::new(window);
+    for x in returns {
+        est.push(x as f32);
     }
     let rms = est.rms();
     assert!(rms >= 0.0 && rms.is_finite());
