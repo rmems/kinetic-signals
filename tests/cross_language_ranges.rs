@@ -34,21 +34,46 @@ fn f64s(v: &Value) -> Vec<f64> {
         .collect()
 }
 
-fn approx_eq(a: f64, b: f64, tolerance: f64) -> bool {
-    (a - b).abs() <= tolerance
+struct CloseCheck<'a> {
+    label: &'a str,
+    got: f64,
+    expected: f64,
+    tolerance: f64,
 }
 
-fn assert_close(label: &str, got: f64, expected: f64, tolerance: f64) {
+fn assert_close(check: CloseCheck<'_>) {
     assert!(
-        approx_eq(got, expected, tolerance),
-        "{label}: got {got} expected {expected} (tol={tolerance})"
+        (check.got - check.expected).abs() <= check.tolerance,
+        "{}: got {} expected {} (tol={})",
+        check.label,
+        check.got,
+        check.expected,
+        check.tolerance
     );
 }
 
-fn assert_series(label: &str, got: &[f64], expected: &[f64], tolerance: f64) {
-    assert_eq!(got.len(), expected.len(), "{label} length mismatch");
-    for (i, (&g, &e)) in got.iter().zip(expected.iter()).enumerate() {
-        assert_close(&format!("{label}[{i}]"), g, e, tolerance);
+struct SeriesCheck<'a> {
+    label: &'a str,
+    got: &'a [f64],
+    expected: &'a [f64],
+    tolerance: f64,
+}
+
+fn assert_series(check: SeriesCheck<'_>) {
+    assert_eq!(
+        check.got.len(),
+        check.expected.len(),
+        "{} length mismatch",
+        check.label
+    );
+    for (i, (&g, &e)) in check.got.iter().zip(check.expected.iter()).enumerate() {
+        let label = format!("{}[{i}]", check.label);
+        assert_close(CloseCheck {
+            label: &label,
+            got: g,
+            expected: e,
+            tolerance: check.tolerance,
+        });
     }
 }
 
@@ -86,34 +111,43 @@ struct SurpriseExpect {
     anomaly: bool,
 }
 
-fn assert_surprise_step(
+struct SurpriseStepCheck<'a> {
     step: usize,
-    result: &SurpriseResult,
-    params: &SurpriseParams,
-    expected: &SurpriseExpect,
+    result: &'a SurpriseResult,
+    params: &'a SurpriseParams,
+    expected: SurpriseExpect,
     tolerance: f64,
-) {
-    assert_close(
-        &format!("surprise[{step}]"),
-        result.surprise,
-        expected.surprise,
-        tolerance,
+}
+
+fn assert_surprise_step(check: SurpriseStepCheck<'_>) {
+    let step = check.step;
+    let label_s = format!("surprise[{step}]");
+    let label_z = format!("z_score[{step}]");
+    let label_lr = format!("log_return[{step}]");
+    assert_close(CloseCheck {
+        label: &label_s,
+        got: check.result.surprise,
+        expected: check.expected.surprise,
+        tolerance: check.tolerance,
+    });
+    assert_close(CloseCheck {
+        label: &label_z,
+        got: check.result.z_score,
+        expected: check.expected.z_score,
+        tolerance: check.tolerance,
+    });
+    assert_close(CloseCheck {
+        label: &label_lr,
+        got: check.result.log_return,
+        expected: check.expected.log_return,
+        tolerance: check.tolerance,
+    });
+    assert!(check.result.surprise >= 0.0);
+    assert_eq!(check.result.surprise, check.result.z_score.abs());
+    assert_eq!(
+        detect_anomaly(check.result, check.params),
+        check.expected.anomaly
     );
-    assert_close(
-        &format!("z_score[{step}]"),
-        result.z_score,
-        expected.z_score,
-        tolerance,
-    );
-    assert_close(
-        &format!("log_return[{step}]"),
-        result.log_return,
-        expected.log_return,
-        tolerance,
-    );
-    assert!(result.surprise >= 0.0);
-    assert_eq!(result.surprise, result.z_score.abs());
-    assert_eq!(detect_anomaly(result, params), expected.anomaly);
 }
 
 fn params_from_json(v: &Value) -> HawkesParams {
@@ -193,21 +227,26 @@ fn hawkes_streaming_single_step_matches_fixture() {
         input["decay_sum"].as_f64().unwrap(),
     );
     let exp = &v["expected"];
-    assert_close(
-        "intensity",
-        intensity,
-        exp["intensity"].as_f64().unwrap(),
+    assert_close(CloseCheck {
+        label: "intensity",
+        got: intensity,
+        expected: exp["intensity"].as_f64().unwrap(),
         tolerance,
-    );
-    assert_close(
-        "new_decay_sum",
-        new_decay,
-        exp["new_decay_sum"].as_f64().unwrap(),
+    });
+    assert_close(CloseCheck {
+        label: "new_decay_sum",
+        got: new_decay,
+        expected: exp["new_decay_sum"].as_f64().unwrap(),
         tolerance,
-    );
+    });
     if let Some(post) = exp.get("post_event_intensity").and_then(|x| x.as_f64()) {
         let post_got = params.mu + params.alpha * new_decay;
-        assert_close("post_event_intensity", post_got, post, tolerance);
+        assert_close(CloseCheck {
+            label: "post_event_intensity",
+            got: post_got,
+            expected: post,
+            tolerance,
+        });
     }
 }
 
@@ -220,27 +259,36 @@ fn hawkes_streaming_sequence_matches_fixture() {
     let params = params_from_json(v["input"].get("params").unwrap_or(&Value::Null));
     let walk = walk_hawkes_streaming(&events, &params);
     let exp = &v["expected"];
-    assert_series(
-        "intensity",
-        &walk.intensities,
-        &f64s(&exp["intensities"]),
+    assert_series(SeriesCheck {
+        label: "intensity",
+        got: &walk.intensities,
+        expected: &f64s(&exp["intensities"]),
         tolerance,
-    );
-    assert_series(
-        "decay_sum",
-        &walk.decay_sums,
-        &f64s(&exp["decay_sums"]),
+    });
+    assert_series(SeriesCheck {
+        label: "decay_sum",
+        got: &walk.decay_sums,
+        expected: &f64s(&exp["decay_sums"]),
         tolerance,
-    );
-    // Final post-event intensity matches batch over the same events.
+    });
     let post = params.mu + params.alpha * walk.decay_sums.last().copied().unwrap_or(0.0);
     let batch = compute_hawkes(&events, &params);
-    assert_close("batch_vs_stream_post", post, batch.intensity, tolerance);
+    assert_close(CloseCheck {
+        label: "batch_vs_stream_post",
+        got: post,
+        expected: batch.intensity,
+        tolerance,
+    });
     if let Some(e) = exp
         .get("post_event_final_intensity")
         .and_then(|x| x.as_f64())
     {
-        assert_close("post_event_final", post, e, tolerance);
+        assert_close(CloseCheck {
+            label: "post_event_final",
+            got: post,
+            expected: e,
+            tolerance,
+        });
     }
 }
 
@@ -277,7 +325,13 @@ fn surprise_sequence_matches_fixture() {
             log_return: step["log_return"].as_f64().unwrap(),
             anomaly: step["anomaly"].as_bool().unwrap(),
         };
-        assert_surprise_step(i, r, &params, &expected, tolerance);
+        assert_surprise_step(SurpriseStepCheck {
+            step: i,
+            result: r,
+            params: &params,
+            expected,
+            tolerance,
+        });
     }
 }
 
@@ -317,25 +371,30 @@ fn signal_stats_matches_fixture() {
     let stats = compute_signal_stats(&data);
     let exp = &v["expected"];
     assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
-    assert_close("mean", stats.mean, exp["mean"].as_f64().unwrap(), tolerance);
-    assert_close(
-        "variance",
-        stats.variance,
-        exp["variance"].as_f64().unwrap(),
+    assert_close(CloseCheck {
+        label: "mean",
+        got: stats.mean,
+        expected: exp["mean"].as_f64().unwrap(),
         tolerance,
-    );
-    assert_close(
-        "skewness",
-        stats.skewness,
-        exp["skewness"].as_f64().unwrap(),
+    });
+    assert_close(CloseCheck {
+        label: "variance",
+        got: stats.variance,
+        expected: exp["variance"].as_f64().unwrap(),
         tolerance,
-    );
-    assert_close(
-        "kurtosis",
-        stats.kurtosis,
-        exp["kurtosis"].as_f64().unwrap(),
+    });
+    assert_close(CloseCheck {
+        label: "skewness",
+        got: stats.skewness,
+        expected: exp["skewness"].as_f64().unwrap(),
         tolerance,
-    );
+    });
+    assert_close(CloseCheck {
+        label: "kurtosis",
+        got: stats.kurtosis,
+        expected: exp["kurtosis"].as_f64().unwrap(),
+        tolerance,
+    });
 }
 
 #[test]
@@ -355,23 +414,28 @@ fn signal_stats_skewed_matches_fixture() {
     let stats = compute_signal_stats(&data);
     let exp = &v["expected"];
     assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
-    assert_close("mean", stats.mean, exp["mean"].as_f64().unwrap(), tolerance);
-    assert_close(
-        "variance",
-        stats.variance,
-        exp["variance"].as_f64().unwrap(),
+    assert_close(CloseCheck {
+        label: "mean",
+        got: stats.mean,
+        expected: exp["mean"].as_f64().unwrap(),
         tolerance,
-    );
-    assert_close(
-        "skewness",
-        stats.skewness,
-        exp["skewness"].as_f64().unwrap(),
+    });
+    assert_close(CloseCheck {
+        label: "variance",
+        got: stats.variance,
+        expected: exp["variance"].as_f64().unwrap(),
         tolerance,
-    );
-    assert_close(
-        "kurtosis",
-        stats.kurtosis,
-        exp["kurtosis"].as_f64().unwrap(),
+    });
+    assert_close(CloseCheck {
+        label: "skewness",
+        got: stats.skewness,
+        expected: exp["skewness"].as_f64().unwrap(),
         tolerance,
-    );
+    });
+    assert_close(CloseCheck {
+        label: "kurtosis",
+        got: stats.kurtosis,
+        expected: exp["kurtosis"].as_f64().unwrap(),
+        tolerance,
+    });
 }
