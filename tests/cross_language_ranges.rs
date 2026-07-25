@@ -82,7 +82,6 @@ struct HawkesWalk {
     decay_sums: Vec<f64>,
 }
 
-/// Process every event, including the first (seed last=t0 so dt=0).
 fn walk_hawkes_streaming(
     events: &[f64],
     params: &HawkesParams,
@@ -202,21 +201,27 @@ fn assert_surprise_fixture(vector_key: &str) {
     }
 }
 
+fn require_f64(v: &Value, key: &str) -> f64 {
+    v.get(key)
+        .and_then(|x| x.as_f64())
+        .unwrap_or_else(|| panic!("fixture missing or non-numeric field `{key}`"))
+}
+
 fn params_from_json(v: &Value) -> HawkesParams {
     HawkesParams {
-        mu: v["mu"].as_f64().unwrap_or(0.1),
-        alpha: v["alpha"].as_f64().unwrap_or(0.5),
-        beta: v["beta"].as_f64().unwrap_or(1.0),
-        dt: v["dt"].as_f64().unwrap_or(0.001),
+        mu: require_f64(v, "mu"),
+        alpha: require_f64(v, "alpha"),
+        beta: require_f64(v, "beta"),
+        dt: require_f64(v, "dt"),
     }
 }
 
 fn surprise_params_from_json(v: &Value) -> SurpriseParams {
     SurpriseParams {
-        mu: v["mu"].as_f64().unwrap_or(0.0),
-        sigma: v["sigma"].as_f64().unwrap_or(0.1),
-        dt: v["dt"].as_f64().unwrap_or(0.001),
-        threshold: v["threshold"].as_f64().unwrap_or(3.0),
+        mu: require_f64(v, "mu"),
+        sigma: require_f64(v, "sigma"),
+        dt: require_f64(v, "dt"),
+        threshold: require_f64(v, "threshold"),
     }
 }
 

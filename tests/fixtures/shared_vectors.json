@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared golden fixtures for kinetic-signals (and SpikeStream.jl parity where those APIs still align). Expanded with streaming Hawkes, surprise_sequence, and signal_stats vectors for Rust determinism / future bindings. Hurst/Hawkes/GBM batch keys remain the historical cross-language contract; streaming keys are Rust-side extensions until Julia consumers adopt them. Tolerance: 1e-6 unless overridden per vector.",
+  "_comment": "Shared golden fixtures for kinetic-signals (and SpikeStream.jl parity where those APIs still align). Expanded with streaming Hawkes, surprise_sequence, and signal_stats vectors for Rust determinism / future bindings. Historical batch keys: hurst, hawkes, surprise (formerly GBM), entropy, volatility. Streaming/sequence/stats keys are Rust-side extensions until Julia consumers adopt them. Tolerance: 1e-6 unless overridden per vector.",
   "tolerance": 1e-06,
   "vectors": {
     "hurst": {
