@@ -20,10 +20,17 @@ fn fixture() -> Value {
     serde_json::from_str(SHARED_VECTORS_JSON).expect("shared_vectors.json must be valid JSON")
 }
 
+fn root_tolerance() -> f64 {
+    fixture()
+        .get("tolerance")
+        .and_then(|t| t.as_f64())
+        .unwrap_or(DEFAULT_TOL)
+}
+
 fn tol(v: &Value) -> f64 {
     v.get("tolerance")
         .and_then(|t| t.as_f64())
-        .unwrap_or(DEFAULT_TOL)
+        .unwrap_or_else(root_tolerance)
 }
 
 fn f64s(v: &Value) -> Vec<f64> {
