@@ -105,41 +105,44 @@ fn resume_last_event_time(
     }
 }
 
-fn assert_hawkes_walk_goldens(
-    walk: &HawkesWalk,
-    exp: &serde_json::Value,
-    events: &[f64],
-    params: &HawkesParams,
+struct HawkesWalkCheck<'a> {
+    walk: &'a HawkesWalk,
+    exp: &'a serde_json::Value,
+    events: &'a [f64],
+    params: &'a HawkesParams,
     initial_decay: f64,
     tolerance: f64,
-) {
+}
+
+fn assert_hawkes_walk_goldens(check: HawkesWalkCheck<'_>) {
     assert_series(SeriesCheck {
         label: "intensity",
-        got: &walk.intensities,
-        expected: &f64s(&exp["intensities"]),
-        tolerance,
+        got: &check.walk.intensities,
+        expected: &f64s(&check.exp["intensities"]),
+        tolerance: check.tolerance,
     });
     assert_series(SeriesCheck {
         label: "decay_sum",
-        got: &walk.decay_sums,
-        expected: &f64s(&exp["decay_sums"]),
-        tolerance,
+        got: &check.walk.decay_sums,
+        expected: &f64s(&check.exp["decay_sums"]),
+        tolerance: check.tolerance,
     });
-    let post = params.mu + params.alpha * walk.decay_sums.last().copied().unwrap_or(0.0);
-    if initial_decay == 0.0 {
-        let batch = compute_hawkes(events, params);
+    let post =
+        check.params.mu + check.params.alpha * check.walk.decay_sums.last().copied().unwrap_or(0.0);
+    if check.initial_decay == 0.0 {
+        let batch = compute_hawkes(check.events, check.params);
         assert_close(CloseCheck {
             label: "batch_vs_stream_post",
             got: post,
             expected: batch.intensity,
-            tolerance,
+            tolerance: check.tolerance,
         });
     }
     assert_close(CloseCheck {
         label: "post_event_final",
         got: post,
-        expected: require_f64(exp, "post_event_final_intensity"),
-        tolerance,
+        expected: require_f64(check.exp, "post_event_final_intensity"),
+        tolerance: check.tolerance,
     });
 }
 
@@ -163,14 +166,14 @@ fn assert_hawkes_sequence_fixture(vector_key: &str) {
     );
     assert_eq!(walk.intensities.len(), expected_len);
     assert_eq!(walk.decay_sums.len(), expected_len);
-    assert_hawkes_walk_goldens(
-        &walk,
-        &v["expected"],
-        &events,
-        &params,
+    assert_hawkes_walk_goldens(HawkesWalkCheck {
+        walk: &walk,
+        exp: &v["expected"],
+        events: &events,
+        params: &params,
         initial_decay,
         tolerance,
-    );
+    });
 }
 
 #[test]
