@@ -13,7 +13,6 @@ use kinetic_signals::{
 };
 use serde_json::Value;
 
-const DEFAULT_TOL: f64 = 1e-6;
 const SHARED_VECTORS_JSON: &str = include_str!("fixtures/shared_vectors.json");
 
 fn fixture() -> Value {
