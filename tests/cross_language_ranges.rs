@@ -162,6 +162,36 @@ fn assert_field_in_output_range(rc: &OutputRangeCtx<'_>, field: &str, got: f64) 
     });
 }
 
+struct SizeCtx {
+    event_times: Option<usize>,
+    values: Option<usize>,
+    data: Option<usize>,
+}
+
+fn parse_size_contract(expr: &Value, ctx: &SizeCtx) -> usize {
+    if let Some(n) = expr.as_u64() {
+        return n as usize;
+    }
+    if let Some(n) = expr.as_i64() {
+        return n as usize;
+    }
+    match expr.as_str() {
+        Some("event_times.len()") => ctx
+            .event_times
+            .unwrap_or_else(|| panic!("size contract event_times.len() needs event_times len")),
+        Some("values.len() - 1") => {
+            let n = ctx
+                .values
+                .unwrap_or_else(|| panic!("size contract values.len()-1 needs values len"));
+            n.saturating_sub(1)
+        }
+        Some("data.len()") => ctx
+            .data
+            .unwrap_or_else(|| panic!("size contract data.len() needs data len")),
+        other => panic!("unsupported size contract: {other:?}"),
+    }
+}
+
 struct HawkesWalk {
     intensities: Vec<f64>,
     decay_sums: Vec<f64>,
@@ -269,7 +299,15 @@ fn assert_surprise_fixture(vector_key: &str) {
     let values = f64s(&v["input"]["values"]);
     let params = surprise_params_from_json(&v["input"]["params"]);
     let results = compute_surprise_sequence(&values, &params);
-    assert_eq!(results.len(), values.len() - 1);
+    let expected_len = parse_size_contract(
+        &v["output_range"]["length"],
+        &SizeCtx {
+            event_times: None,
+            values: Some(values.len()),
+            data: None,
+        },
+    );
+    assert_eq!(results.len(), expected_len);
 
     let steps = v["expected"]["steps"]
         .as_array()
@@ -284,6 +322,101 @@ fn assert_surprise_fixture(vector_key: &str) {
             tolerance,
         });
     }
+}
+
+fn assert_hawkes_streaming_step_fixture(vector_key: &str) {
+    let root = fixture();
+    let v = &root["vectors"][vector_key];
+    let tolerance = tol(v);
+    let input = &v["input"];
+    let params = params_from_json(&input["params"]);
+    let (intensity, new_decay) = compute_hawkes_streaming(
+        require_f64(input, "prev_intensity"),
+        require_f64(input, "new_event_time"),
+        require_f64(input, "last_event_time"),
+        &params,
+        require_f64(input, "decay_sum"),
+    );
+    let exp = &v["expected"];
+    assert_close(CloseCheck {
+        label: "intensity",
+        got: intensity,
+        expected: require_f64(exp, "intensity"),
+        tolerance,
+    });
+    assert_close(CloseCheck {
+        label: "new_decay_sum",
+        got: new_decay,
+        expected: require_f64(exp, "new_decay_sum"),
+        tolerance,
+    });
+    let post_got = params.mu + params.alpha * new_decay;
+    assert_close(CloseCheck {
+        label: "post_event_intensity",
+        got: post_got,
+        expected: require_f64(exp, "post_event_intensity"),
+        tolerance,
+    });
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: Some(params.mu),
+            bins: None,
+        },
+        tolerance,
+    };
+    assert_field_in_output_range(&rc, "intensity", intensity);
+    assert_field_in_output_range(&rc, "new_decay_sum", new_decay);
+}
+
+fn assert_hawkes_sequence_fixture(vector_key: &str) {
+    let root = fixture();
+    let v = &root["vectors"][vector_key];
+    let tolerance = tol(v);
+    let events = f64s(&v["input"]["event_times"]);
+    let params = params_from_json(&v["input"]["params"]);
+    let initial_decay = require_f64(&v["input"], "initial_decay_sum");
+    let walk = walk_hawkes_streaming(&events, &params, initial_decay);
+    let exp = &v["expected"];
+    let expected_len = parse_size_contract(
+        &v["output_range"]["length"],
+        &SizeCtx {
+            event_times: Some(events.len()),
+            values: None,
+            data: None,
+        },
+    );
+    assert_eq!(walk.intensities.len(), expected_len);
+    assert_eq!(walk.decay_sums.len(), expected_len);
+    assert_series(SeriesCheck {
+        label: "intensity",
+        got: &walk.intensities,
+        expected: &f64s(&exp["intensities"]),
+        tolerance,
+    });
+    assert_series(SeriesCheck {
+        label: "decay_sum",
+        got: &walk.decay_sums,
+        expected: &f64s(&exp["decay_sums"]),
+        tolerance,
+    });
+    let post = params.mu + params.alpha * walk.decay_sums.last().copied().unwrap_or(0.0);
+    // batch compute_hawkes always starts from zero decay; only equate when fixture does too
+    if initial_decay == 0.0 {
+        let batch = compute_hawkes(&events, &params);
+        assert_close(CloseCheck {
+            label: "batch_vs_stream_post",
+            got: post,
+            expected: batch.intensity,
+            tolerance,
+        });
+    }
+    assert_close(CloseCheck {
+        label: "post_event_final",
+        got: post,
+        expected: require_f64(exp, "post_event_final_intensity"),
+        tolerance,
+    });
 }
 
 fn require_f64(v: &Value, key: &str) -> f64 {
@@ -319,7 +452,9 @@ fn fixture_parses_and_documents_required_vector_keys() {
         "hurst",
         "hawkes",
         "hawkes_streaming",
+        "hawkes_streaming_nondefault",
         "hawkes_streaming_sequence",
+        "hawkes_streaming_sequence_resume",
         "surprise",
         "surprise_sequence",
         "surprise_sequence_drift",
@@ -388,97 +523,50 @@ fn hawkes_intensity_at_least_baseline() {
 
 #[test]
 fn hawkes_streaming_single_step_matches_fixture() {
-    let root = fixture();
-    let v = &root["vectors"]["hawkes_streaming"];
-    let tolerance = tol(v);
-    let input = &v["input"];
-    let params = params_from_json(&input["params"]);
-    let (intensity, new_decay) = compute_hawkes_streaming(
-        require_f64(input, "prev_intensity"),
-        require_f64(input, "new_event_time"),
-        require_f64(input, "last_event_time"),
-        &params,
-        require_f64(input, "decay_sum"),
-    );
-    let exp = &v["expected"];
-    assert_close(CloseCheck {
-        label: "intensity",
-        got: intensity,
-        expected: require_f64(exp, "intensity"),
-        tolerance,
-    });
-    assert_close(CloseCheck {
-        label: "new_decay_sum",
-        got: new_decay,
-        expected: require_f64(exp, "new_decay_sum"),
-        tolerance,
-    });
-    let post = require_f64(exp, "post_event_intensity");
-    let post_got = params.mu + params.alpha * new_decay;
-    assert_close(CloseCheck {
-        label: "post_event_intensity",
-        got: post_got,
-        expected: post,
-        tolerance,
-    });
+    assert_hawkes_streaming_step_fixture("hawkes_streaming");
+}
+
+#[test]
+fn hawkes_streaming_nondefault_matches_fixture() {
+    assert_hawkes_streaming_step_fixture("hawkes_streaming_nondefault");
 }
 
 #[test]
 fn hawkes_streaming_sequence_matches_fixture() {
-    let root = fixture();
-    let v = &root["vectors"]["hawkes_streaming_sequence"];
-    let tolerance = tol(v);
-    let events = f64s(&v["input"]["event_times"]);
-    let params = params_from_json(&v["input"]["params"]);
-    let initial_decay = require_f64(&v["input"], "initial_decay_sum");
-    let walk = walk_hawkes_streaming(&events, &params, initial_decay);
-    let exp = &v["expected"];
-    assert_series(SeriesCheck {
-        label: "intensity",
-        got: &walk.intensities,
-        expected: &f64s(&exp["intensities"]),
-        tolerance,
-    });
-    assert_series(SeriesCheck {
-        label: "decay_sum",
-        got: &walk.decay_sums,
-        expected: &f64s(&exp["decay_sums"]),
-        tolerance,
-    });
-    let post = params.mu + params.alpha * walk.decay_sums.last().copied().unwrap_or(0.0);
-    // batch compute_hawkes always starts from zero decay; only equate when fixture does too
-    if initial_decay == 0.0 {
-        let batch = compute_hawkes(&events, &params);
-        assert_close(CloseCheck {
-            label: "batch_vs_stream_post",
-            got: post,
-            expected: batch.intensity,
-            tolerance,
-        });
-    }
-    assert_close(CloseCheck {
-        label: "post_event_final",
-        got: post,
-        expected: require_f64(exp, "post_event_final_intensity"),
-        tolerance,
-    });
+    assert_hawkes_sequence_fixture("hawkes_streaming_sequence");
+}
+
+#[test]
+fn hawkes_streaming_sequence_resume_matches_fixture() {
+    assert_hawkes_sequence_fixture("hawkes_streaming_sequence_resume");
 }
 
 #[test]
 fn surprise_is_nonnegative_and_anomaly_consistent() {
     let root = fixture();
     let v = &root["vectors"]["surprise"];
+    let _tolerance = tol(v);
     let input = &v["input"];
     let params = surprise_params_from_json(&input["params"]);
-    let prev = input["previous_value"].as_f64().unwrap();
-    let curr = input["current_value"].as_f64().unwrap();
+    let prev = require_f64(input, "previous_value");
+    let curr = require_f64(input, "current_value");
     let calm = compute_surprise(prev, prev, &params);
     assert!(calm.surprise.is_finite() && calm.surprise >= 0.0);
     assert!(calm.surprise <= params.threshold);
     let spike = compute_surprise(curr, prev, &params);
-    assert!(spike.surprise >= 0.0);
+    assert!(spike.surprise.is_finite() && spike.surprise >= 0.0);
     assert_eq!(spike.surprise, spike.z_score.abs());
     assert!(spike.surprise > params.threshold);
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: None,
+            bins: None,
+        },
+        tolerance: _tolerance,
+    };
+    assert_field_in_output_range(&rc, "surprise", spike.surprise);
+    assert_field_in_output_range(&rc, "z_score", spike.z_score);
 }
 
 #[test]
@@ -552,7 +640,24 @@ fn assert_signal_stats_fixture(vector_key: &str) {
     let data = f64s(&v["input"]["data"]);
     let stats = compute_signal_stats(&data);
     let exp = &v["expected"];
+    let count_contract = parse_size_contract(
+        &v["output_range"]["count"],
+        &SizeCtx {
+            event_times: None,
+            values: None,
+            data: Some(data.len()),
+        },
+    );
+    assert_eq!(stats.count, count_contract);
     assert_eq!(stats.count, exp["count"].as_u64().unwrap() as usize);
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &BoundCtx {
+            mu: None,
+            bins: None,
+        },
+        tolerance,
+    };
     for (label, got) in [
         ("mean", stats.mean),
         ("variance", stats.variance),
@@ -565,6 +670,7 @@ fn assert_signal_stats_fixture(vector_key: &str) {
             expected: exp[label].as_f64().unwrap(),
             tolerance,
         });
+        assert_field_in_output_range(&rc, label, got);
     }
 }
 

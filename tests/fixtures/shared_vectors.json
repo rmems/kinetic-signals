@@ -141,7 +141,38 @@
         ]
       },
       "tolerance": 1e-06,
-      "notes": "First event at t=0 with empty prior: pre-jump intensity is mu; decay becomes 1; post-event is mu+alpha."
+      "notes": "First event at t=0 with empty prior: pre-jump intensity is mu; decay becomes 1; post-event is mu+alpha. prev_intensity is intentionally nonzero (unused by the API; reserved for stability)."
+    },
+    "hawkes_streaming_nondefault": {
+      "input": {
+        "prev_intensity": 42.0,
+        "new_event_time": 0.0,
+        "last_event_time": 0.0,
+        "params": {
+          "mu": 0.25,
+          "alpha": 0.3,
+          "beta": 2.0,
+          "dt": 0.001
+        },
+        "decay_sum": 0.0
+      },
+      "expected": {
+        "intensity": 0.25,
+        "new_decay_sum": 1.0,
+        "post_event_intensity": 0.55
+      },
+      "output_range": {
+        "intensity": [
+          "mu",
+          "Inf"
+        ],
+        "new_decay_sum": [
+          0.0,
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
+      "notes": "Same geometry as hawkes_streaming but with non-default mu/alpha/beta so parameter propagation is fixture-checked."
     },
     "hawkes_streaming_sequence": {
       "input": {
@@ -198,7 +229,49 @@
         "length": "event_times.len()"
       },
       "tolerance": 1e-06,
-      "notes": "Walk compute_hawkes_streaming over every event including the first (first step uses last=t0 so dt=0). Each intensity is the pre-jump value returned by the API; decay_sums include the event just processed. Result length equals event_times.len(). post_event_final_intensity = mu + alpha * final_decay_sum matches batch compute_hawkes."
+      "notes": "Walk compute_hawkes_streaming over every event including the first (first step uses last=t0 so dt=0). Each intensity is the pre-jump value returned by the API; decay_sums include the event just processed. Result length equals event_times.len(). post_event_final_intensity = mu + alpha * final_decay_sum matches batch compute_hawkes when initial_decay_sum is 0."
+    },
+    "hawkes_streaming_sequence_resume": {
+      "input": {
+        "event_times": [
+          0.0,
+          0.1,
+          0.2
+        ],
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        },
+        "initial_decay_sum": 2.5
+      },
+      "expected": {
+        "intensities": [
+          1.35,
+          1.6834654815629293,
+          1.9851975269044482
+        ],
+        "decay_sums": [
+          3.5,
+          4.166930963125859,
+          4.770395053808896
+        ],
+        "post_event_final_intensity": 2.485197526904448
+      },
+      "output_range": {
+        "intensities": [
+          "mu",
+          "Inf"
+        ],
+        "decay_sums": [
+          0.0,
+          "Inf"
+        ],
+        "length": "event_times.len()"
+      },
+      "tolerance": 1e-06,
+      "notes": "Nonzero initial_decay_sum exercises stream resume. Batch equivalence is not asserted (batch always starts from zero decay)."
     },
     "surprise": {
       "input": {
