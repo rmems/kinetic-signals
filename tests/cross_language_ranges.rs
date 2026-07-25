@@ -139,20 +139,20 @@ fn assert_in_range(check: InRangeCheck<'_>) {
     );
 }
 
-fn assert_field_in_output_range(
-    ranges: &Value,
-    field: &str,
-    got: f64,
-    ctx: &BoundCtx,
+struct OutputRangeCtx<'a> {
+    ranges: &'a Value,
+    bounds: &'a BoundCtx,
     tolerance: f64,
-) {
-    let (lo, hi) = range_pair(&ranges[field], ctx);
+}
+
+fn assert_field_in_output_range(rc: &OutputRangeCtx<'_>, field: &str, got: f64) {
+    let (lo, hi) = range_pair(&rc.ranges[field], rc.bounds);
     assert_in_range(InRangeCheck {
         label: field,
         got,
         lo,
         hi,
-        tolerance,
+        tolerance: rc.tolerance,
     });
 }
 
@@ -338,14 +338,16 @@ fn hurst_within_unit_interval() {
     let r = compute_hurst(&data);
     assert!(r.h.is_finite());
     assert_field_in_output_range(
-        &v["output_range"],
+        &OutputRangeCtx {
+            ranges: &v["output_range"],
+            bounds: &BoundCtx {
+                mu: None,
+                bins: None,
+            },
+            tolerance,
+        },
         "h",
         r.h,
-        &BoundCtx {
-            mu: None,
-            bins: None,
-        },
-        tolerance,
     );
     let r2 = compute_hurst(&data);
     assert_close(CloseCheck {
@@ -368,10 +370,13 @@ fn hawkes_intensity_at_least_baseline() {
         mu: Some(params.mu),
         bins: None,
     };
-    let ranges = &v["output_range"];
-    let tolerance = tol(v);
-    assert_field_in_output_range(ranges, "intensity", r.intensity, &ctx, tolerance);
-    assert_field_in_output_range(ranges, "avg_excitation", r.avg_excitation, &ctx, tolerance);
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &ctx,
+        tolerance: tol(v),
+    };
+    assert_field_in_output_range(&rc, "intensity", r.intensity);
+    assert_field_in_output_range(&rc, "avg_excitation", r.avg_excitation);
     assert_eq!(r.event_count, events.len());
 }
 
@@ -498,9 +503,13 @@ fn entropy_within_bounds() {
         mu: None,
         bins: Some(bins),
     };
-    let ranges = &v["output_range"];
-    assert_field_in_output_range(ranges, "shannon", r.shannon, &ctx, tolerance);
-    assert_field_in_output_range(ranges, "relative", r.relative, &ctx, tolerance);
+    let rc = OutputRangeCtx {
+        ranges: &v["output_range"],
+        bounds: &ctx,
+        tolerance,
+    };
+    assert_field_in_output_range(&rc, "shannon", r.shannon);
+    assert_field_in_output_range(&rc, "relative", r.relative);
     assert!(r.bin_count <= bins);
 }
 
@@ -517,14 +526,16 @@ fn volatility_rms_nonnegative() {
     let rms = est.rms();
     assert!(rms.is_finite());
     assert_field_in_output_range(
-        &v["output_range"],
+        &OutputRangeCtx {
+            ranges: &v["output_range"],
+            bounds: &BoundCtx {
+                mu: None,
+                bins: None,
+            },
+            tolerance: tol(v),
+        },
         "rms",
         rms as f64,
-        &BoundCtx {
-            mu: None,
-            bins: None,
-        },
-        tol(v),
     );
 }
 
