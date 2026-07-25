@@ -146,20 +146,20 @@
     "hawkes_streaming_nondefault": {
       "input": {
         "prev_intensity": 42.0,
-        "new_event_time": 0.0,
-        "last_event_time": 0.0,
+        "new_event_time": 1.0,
+        "last_event_time": 0.5,
         "params": {
           "mu": 0.25,
           "alpha": 0.3,
           "beta": 2.0,
           "dt": 0.001
         },
-        "decay_sum": 0.0
+        "decay_sum": 1.5
       },
       "expected": {
-        "intensity": 0.25,
-        "new_decay_sum": 1.0,
-        "post_event_intensity": 0.55
+        "intensity": 0.41554574852714904,
+        "new_decay_sum": 1.5518191617571635,
+        "post_event_intensity": 0.715545748527149
       },
       "output_range": {
         "intensity": [
@@ -172,7 +172,7 @@
         ]
       },
       "tolerance": 1e-06,
-      "notes": "Same geometry as hawkes_streaming but with non-default mu/alpha/beta so parameter propagation is fixture-checked."
+      "notes": "Non-default mu/alpha/beta with nonzero decay_sum and elapsed dt=0.5 so intensity and new_decay_sum depend on alpha and beta (not only mu)."
     },
     "hawkes_streaming_sequence": {
       "input": {
@@ -234,9 +234,9 @@
     "hawkes_streaming_sequence_resume": {
       "input": {
         "event_times": [
-          0.0,
-          0.1,
-          0.2
+          1.0,
+          1.1,
+          1.2
         ],
         "params": {
           "mu": 0.1,
@@ -244,20 +244,21 @@
           "beta": 1.0,
           "dt": 0.001
         },
-        "initial_decay_sum": 2.5
+        "initial_decay_sum": 2.5,
+        "initial_last_event_time": 0.5
       },
       "expected": {
         "intensities": [
-          1.35,
-          1.6834654815629293,
-          1.9851975269044482
+          0.8581633246407917,
+          1.2384332541355128,
+          1.5825157152962328
         ],
         "decay_sums": [
-          3.5,
-          4.166930963125859,
-          4.770395053808896
+          2.5163266492815834,
+          3.2768665082710253,
+          3.9650314305924654
         ],
-        "post_event_final_intensity": 2.485197526904448
+        "post_event_final_intensity": 2.0825157152962328
       },
       "output_range": {
         "intensities": [
@@ -271,7 +272,7 @@
         "length": "event_times.len()"
       },
       "tolerance": 1e-06,
-      "notes": "Nonzero initial_decay_sum exercises stream resume. Batch equivalence is not asserted (batch always starts from zero decay)."
+      "notes": "Stream resume: initial_decay_sum and initial_last_event_time capture prior state. First event decays from t=0.5 to t=1.0 before adding the new event. Batch equivalence is not asserted (batch always starts from zero decay)."
     },
     "surprise": {
       "input": {
