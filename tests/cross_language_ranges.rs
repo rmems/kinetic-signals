@@ -95,8 +95,8 @@ fn walk_hawkes_streaming(
     let mut decay_sums = Vec::with_capacity(events.len());
     for (i, &t) in events.iter().enumerate() {
         let last_for_step = if i == 0 { t } else { last };
-        let prior = if i == 0 { initial_decay_sum } else { decay_sum };
-        let (intensity, new_decay) = compute_hawkes_streaming(0.0, t, last_for_step, params, prior);
+        let (intensity, new_decay) =
+            compute_hawkes_streaming(0.0, t, last_for_step, params, decay_sum);
         intensities.push(intensity);
         decay_sums.push(new_decay);
         decay_sum = new_decay;
@@ -326,13 +326,16 @@ fn hawkes_streaming_sequence_matches_fixture() {
         tolerance,
     });
     let post = params.mu + params.alpha * walk.decay_sums.last().copied().unwrap_or(0.0);
-    let batch = compute_hawkes(&events, &params);
-    assert_close(CloseCheck {
-        label: "batch_vs_stream_post",
-        got: post,
-        expected: batch.intensity,
-        tolerance,
-    });
+    // batch compute_hawkes always starts from zero decay; only equate when fixture does too
+    if initial_decay == 0.0 {
+        let batch = compute_hawkes(&events, &params);
+        assert_close(CloseCheck {
+            label: "batch_vs_stream_post",
+            got: post,
+            expected: batch.intensity,
+            tolerance,
+        });
+    }
     if let Some(e) = exp
         .get("post_event_final_intensity")
         .and_then(|x| x.as_f64())
