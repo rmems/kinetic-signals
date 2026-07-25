@@ -24,7 +24,7 @@ fn root_tolerance() -> f64 {
     fixture()
         .get("tolerance")
         .and_then(|t| t.as_f64())
-        .unwrap_or(DEFAULT_TOL)
+        .unwrap_or_else(|| panic!("fixture missing or non-numeric root `tolerance`"))
 }
 
 fn tol(v: &Value) -> f64 {
