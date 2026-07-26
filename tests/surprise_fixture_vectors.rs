@@ -3,16 +3,28 @@
 //! Surprise golden-vector parity checks (issue #28 / LIM-201).
 
 mod common;
+#[path = "common/size.rs"]
+mod size;
 
 use common::{
-    BoundCtx, CloseCheck, OutputRangeCtx, SizeCtx, assert_close, assert_field_in_output_range,
-    f64s, fixture, parse_size_contract, require_f64, surprise_params_from_json, tol,
+    BoundCtx, CloseCheck, OutputRangeCtx, assert_close, assert_field_in_output_range, f64s,
+    fixture, require_f64, tol,
 };
 use kinetic_signals::{
     compute_surprise, compute_surprise_sequence, detect_anomaly, surprise::SurpriseParams,
     surprise::SurpriseResult,
 };
 use serde_json::Value;
+use size::{SizeCtx, parse_size_contract};
+
+fn surprise_params_from_json(v: &Value) -> SurpriseParams {
+    SurpriseParams {
+        mu: require_f64(v, "mu"),
+        sigma: require_f64(v, "sigma"),
+        dt: require_f64(v, "dt"),
+        threshold: require_f64(v, "threshold"),
+    }
+}
 
 struct SurpriseExpect {
     surprise: f64,

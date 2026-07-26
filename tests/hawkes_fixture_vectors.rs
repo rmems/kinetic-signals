@@ -3,13 +3,56 @@
 //! Hawkes golden-vector parity checks (issue #28 / LIM-201).
 
 mod common;
+#[path = "common/size.rs"]
+mod size;
 
 use common::{
-    BoundCtx, CloseCheck, OutputRangeCtx, SeriesCheck, SizeCtx, assert_close,
-    assert_field_in_output_range, assert_series, assert_series_in_output_range, f64s, fixture,
-    params_from_json, parse_size_contract, require_f64, tol,
+    BoundCtx, CloseCheck, OutputRangeCtx, assert_close, assert_field_in_output_range, f64s,
+    fixture, require_f64, tol,
 };
 use kinetic_signals::{compute_hawkes, compute_hawkes_streaming, hawkes::HawkesParams};
+use serde_json::Value;
+use size::{SizeCtx, parse_size_contract};
+
+struct SeriesCheck<'a> {
+    label: &'a str,
+    got: &'a [f64],
+    expected: &'a [f64],
+    tolerance: f64,
+}
+
+fn assert_series(check: SeriesCheck<'_>) {
+    assert_eq!(
+        check.got.len(),
+        check.expected.len(),
+        "{} length mismatch",
+        check.label
+    );
+    for (i, (&g, &e)) in check.got.iter().zip(check.expected.iter()).enumerate() {
+        let label = format!("{}[{i}]", check.label);
+        assert_close(CloseCheck {
+            label: &label,
+            got: g,
+            expected: e,
+            tolerance: check.tolerance,
+        });
+    }
+}
+
+fn assert_series_in_output_range(rc: &OutputRangeCtx<'_>, field: &str, values: &[f64]) {
+    for &got in values {
+        assert_field_in_output_range(rc, field, got);
+    }
+}
+
+fn params_from_json(v: &Value) -> HawkesParams {
+    HawkesParams {
+        mu: require_f64(v, "mu"),
+        alpha: require_f64(v, "alpha"),
+        beta: require_f64(v, "beta"),
+        dt: require_f64(v, "dt"),
+    }
+}
 
 struct HawkesWalk {
     intensities: Vec<f64>,

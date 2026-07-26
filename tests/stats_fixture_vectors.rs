@@ -3,12 +3,15 @@
 //! Signal-stats golden-vector parity checks (issue #28 / LIM-201).
 
 mod common;
+#[path = "common/size.rs"]
+mod size;
 
 use common::{
-    BoundCtx, CloseCheck, OutputRangeCtx, SizeCtx, assert_close, assert_field_in_output_range,
-    f64s, fixture, parse_size_contract, tol,
+    BoundCtx, CloseCheck, OutputRangeCtx, assert_close, assert_field_in_output_range, f64s,
+    fixture, tol,
 };
 use kinetic_signals::compute_signal_stats;
+use size::{SizeCtx, parse_size_contract};
 
 fn assert_signal_stats_fixture(vector_key: &str) {
     let root = fixture();
