@@ -27,6 +27,7 @@ Part of the [Limen-Neural](https://github.com/Limen-Neural) ecosystem. See [`doc
 | `sentry` 0.48.2 | optional | Error monitoring (feature-gated) |
 | `serial_test` 3.0 | dev | Serial test execution for env var tests |
 | `temp-env` 0.3.6 | dev | Safe environment variable manipulation |
+| `serde_json` 1 | dev | Deserialize shared golden fixtures in tests |
 
 ## Toolchain
 

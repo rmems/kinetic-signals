@@ -1,44 +1,634 @@
 {
-  "_comment": "Shared cross-language test vectors for kinetic-signals (Rust) and SpikeStream.jl (Julia). Tracks issue #3 / LIM-31. Both implementations must consume the SAME inputs and produce outputs within the documented ranges (and matching within tolerance once SpikeStream.jl validation is run against this file).",
-  "tolerance": 1e-6,
+  "_comment": "Shared golden fixtures for kinetic-signals (and SpikeStream.jl parity where those APIs still align). Expanded with streaming Hawkes, surprise_sequence, and signal_stats vectors for Rust determinism / future bindings. Historical batch keys: hurst, hawkes, surprise (formerly GBM), entropy, volatility. Streaming/sequence/stats keys are Rust-side extensions until Julia consumers adopt them. Tolerance: 1e-6 unless overridden per vector.",
+  "tolerance": 1e-06,
   "vectors": {
     "hurst": {
-      "input": { "data": "[i * 0.1 for i in 0..64]" },
-      "output_range": { "h": [0.0, 1.0] },
+      "input": {
+        "data": [
+          0.0,
+          0.1,
+          0.2,
+          0.3,
+          0.4,
+          0.5,
+          0.6,
+          0.7,
+          0.8,
+          0.9,
+          1.0,
+          1.1,
+          1.2,
+          1.3,
+          1.4,
+          1.5,
+          1.6,
+          1.7,
+          1.8,
+          1.9,
+          2.0,
+          2.1,
+          2.2,
+          2.3,
+          2.4,
+          2.5,
+          2.6,
+          2.7,
+          2.8,
+          2.9,
+          3.0,
+          3.1,
+          3.2,
+          3.3,
+          3.4,
+          3.5,
+          3.6,
+          3.7,
+          3.8,
+          3.9,
+          4.0,
+          4.1,
+          4.2,
+          4.3,
+          4.4,
+          4.5,
+          4.6,
+          4.7,
+          4.8,
+          4.9,
+          5.0,
+          5.1,
+          5.2,
+          5.3,
+          5.4,
+          5.5,
+          5.6,
+          5.7,
+          5.8,
+          5.9,
+          6.0,
+          6.1,
+          6.2,
+          6.3
+        ]
+      },
+      "output_range": {
+        "h": [
+          0.0,
+          1.0
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "Hurst exponent is clamped to [0, 1]. is_persistent = h > 0.52, is_antipersistent = h < 0.48."
     },
     "hawkes": {
       "input": {
-        "event_times": [0.0, 0.01, 0.02, 0.03, 0.1, 0.5, 0.51, 0.52],
-        "params": { "mu": 0.1, "alpha": 0.5, "beta": 1.0, "dt": 0.001 }
+        "event_times": [
+          0.0,
+          0.01,
+          0.02,
+          0.03,
+          0.1,
+          0.5,
+          0.51,
+          0.52
+        ],
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        }
       },
-      "output_range": { "intensity": ["mu", "Inf"], "avg_excitation": [0.0, "Inf"] },
+      "output_range": {
+        "intensity": [
+          "mu",
+          "Inf"
+        ],
+        "avg_excitation": [
+          0.0,
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "intensity >= mu; avg_excitation >= 0; event_count == input length."
+    },
+    "hawkes_streaming": {
+      "input": {
+        "prev_intensity": 42.0,
+        "new_event_time": 0.0,
+        "last_event_time": 0.0,
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        },
+        "decay_sum": 0.0
+      },
+      "expected": {
+        "intensity": 0.1,
+        "new_decay_sum": 1.0,
+        "post_event_intensity": 0.6
+      },
+      "output_range": {
+        "intensity": [
+          "mu",
+          "Inf"
+        ],
+        "new_decay_sum": [
+          0.0,
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
+      "notes": "First event at t=0 with empty prior: pre-jump intensity is mu; decay becomes 1; post-event is mu+alpha. prev_intensity is intentionally nonzero (unused by the API; reserved for stability)."
+    },
+    "hawkes_streaming_nondefault": {
+      "input": {
+        "prev_intensity": 42.0,
+        "new_event_time": 1.0,
+        "last_event_time": 0.5,
+        "params": {
+          "mu": 0.25,
+          "alpha": 0.3,
+          "beta": 2.0,
+          "dt": 0.001
+        },
+        "decay_sum": 1.5
+      },
+      "expected": {
+        "intensity": 0.41554574852714904,
+        "new_decay_sum": 1.5518191617571635,
+        "post_event_intensity": 0.715545748527149
+      },
+      "output_range": {
+        "intensity": [
+          "mu",
+          "Inf"
+        ],
+        "new_decay_sum": [
+          0.0,
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
+      "notes": "Non-default mu/alpha/beta with nonzero decay_sum and elapsed dt=0.5 so intensity and new_decay_sum depend on alpha and beta (not only mu)."
+    },
+    "hawkes_streaming_sequence": {
+      "input": {
+        "event_times": [
+          0.0,
+          0.01,
+          0.02,
+          0.03,
+          0.1,
+          0.5,
+          0.51,
+          0.52
+        ],
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        },
+        "initial_decay_sum": 0.0
+      },
+      "expected": {
+        "intensities": [
+          0.1,
+          0.595024916874584,
+          1.0851242535279617,
+          1.5703470203022158,
+          1.9371393847998861,
+          1.6666313800107653,
+          2.1460680542004718,
+          2.6207342537752445
+        ],
+        "decay_sums": [
+          1.0,
+          1.990049833749168,
+          2.9702485070559232,
+          3.9406940406044315,
+          4.674278769599772,
+          4.13326276002153,
+          5.092136108400943,
+          6.041468507550489
+        ],
+        "post_event_final_intensity": 3.1207342537752445
+      },
+      "output_range": {
+        "intensities": [
+          "mu",
+          "Inf"
+        ],
+        "decay_sums": [
+          0.0,
+          "Inf"
+        ],
+        "length": "event_times.len()"
+      },
+      "tolerance": 1e-06,
+      "notes": "Walk compute_hawkes_streaming over every event including the first (first step uses last=t0 so dt=0). Each intensity is the pre-jump value returned by the API; decay_sums include the event just processed. Result length equals event_times.len(). post_event_final_intensity = mu + alpha * final_decay_sum matches batch compute_hawkes when initial_decay_sum is 0."
+    },
+    "hawkes_streaming_sequence_resume": {
+      "input": {
+        "event_times": [
+          1.0,
+          1.1,
+          1.2
+        ],
+        "params": {
+          "mu": 0.1,
+          "alpha": 0.5,
+          "beta": 1.0,
+          "dt": 0.001
+        },
+        "initial_decay_sum": 2.5,
+        "initial_last_event_time": 0.5
+      },
+      "expected": {
+        "intensities": [
+          0.8581633246407917,
+          1.2384332541355128,
+          1.5825157152962328
+        ],
+        "decay_sums": [
+          2.5163266492815834,
+          3.2768665082710253,
+          3.9650314305924654
+        ],
+        "post_event_final_intensity": 2.082515715296233
+      },
+      "output_range": {
+        "intensities": [
+          "mu",
+          "Inf"
+        ],
+        "decay_sums": [
+          0.0,
+          "Inf"
+        ],
+        "length": "event_times.len()"
+      },
+      "tolerance": 1e-06,
+      "notes": "Stream resume: initial_decay_sum and initial_last_event_time capture prior state. First event decays from t=0.5 to t=1.0 before adding the new event. Batch equivalence is not asserted (batch always starts from zero decay)."
     },
     "surprise": {
       "input": {
         "current_value": 150.0,
         "previous_value": 100.0,
-        "params": { "mu": 0.0, "sigma": 0.1, "dt": 0.001, "threshold": 3.0 }
+        "params": {
+          "mu": 0.0,
+          "sigma": 0.1,
+          "dt": 0.001,
+          "threshold": 3.0
+        }
       },
-      "output_range": { "surprise": [0.0, "Inf"], "z_score": ["-Inf", "Inf"] },
+      "output_range": {
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "surprise == abs(z_score) >= 0; anomaly when surprise > threshold. Non-positive inputs yield a zeroed result."
+    },
+    "surprise_sequence": {
+      "input": {
+        "values": [
+          100.0,
+          100.0,
+          101.0,
+          150.0,
+          148.0
+        ],
+        "params": {
+          "mu": 0.0,
+          "sigma": 0.1,
+          "dt": 0.001,
+          "threshold": 3.0
+        }
+      },
+      "expected": {
+        "steps": [
+          {
+            "surprise": 0.0,
+            "z_score": 0.0,
+            "log_return": 0.0,
+            "expected_return": 0.0,
+            "anomaly": false
+          },
+          {
+            "surprise": 3.1465708968257626,
+            "z_score": 3.1465708968257626,
+            "log_return": 0.009950330853168092,
+            "expected_return": 0.0,
+            "anomaly": true
+          },
+          {
+            "surprise": 125.07275443799473,
+            "z_score": 125.07275443799473,
+            "log_return": 0.3955147772549963,
+            "expected_return": 0.0,
+            "anomaly": true
+          },
+          {
+            "surprise": 4.244731732831435,
+            "z_score": -4.244731732831435,
+            "log_return": -0.013423020332140661,
+            "expected_return": 0.0,
+            "anomaly": true
+          }
+        ]
+      },
+      "output_range": {
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ],
+        "expected_return": [
+          "-Inf",
+          "Inf"
+        ],
+        "length": "values.len() - 1"
+      },
+      "tolerance": 1e-06,
+      "notes": "compute_surprise_sequence yields one SurpriseResult per consecutive pair (len = values.len()-1). expected_return = mu * dt (0 here). anomaly = surprise > threshold. Empty/short inputs (<2) yield []. Compare floats within tolerance 1e-6."
+    },
+    "surprise_sequence_drift": {
+      "input": {
+        "values": [
+          100.0,
+          100.0,
+          101.0,
+          150.0,
+          148.0
+        ],
+        "params": {
+          "mu": 0.5,
+          "sigma": 0.1,
+          "dt": 0.001,
+          "threshold": 3.0
+        }
+      },
+      "expected": {
+        "steps": [
+          {
+            "surprise": 0.15811388300841897,
+            "z_score": -0.15811388300841897,
+            "log_return": 0.0,
+            "expected_return": 0.0005,
+            "anomaly": false
+          },
+          {
+            "surprise": 2.9884570138173436,
+            "z_score": 2.9884570138173436,
+            "log_return": 0.009950330853168092,
+            "expected_return": 0.0005,
+            "anomaly": false
+          },
+          {
+            "surprise": 124.91464055498632,
+            "z_score": 124.91464055498632,
+            "log_return": 0.3955147772549963,
+            "expected_return": 0.0005,
+            "anomaly": true
+          },
+          {
+            "surprise": 4.402845615839854,
+            "z_score": -4.402845615839854,
+            "log_return": -0.013423020332140661,
+            "expected_return": 0.0005,
+            "anomaly": true
+          }
+        ]
+      },
+      "output_range": {
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ],
+        "expected_return": [
+          "-Inf",
+          "Inf"
+        ],
+        "length": "values.len() - 1"
+      },
+      "tolerance": 1e-06,
+      "notes": "Nonzero drift: expected_return = mu * dt = 0.5 * 0.001 = 0.0005 on every step. z_score uses (log_return - expected_return) / (sigma * sqrt(dt))."
+    },
+    "surprise_sequence_nondefault": {
+      "input": {
+        "values": [
+          100.0,
+          100.0,
+          102.3,
+          150.0,
+          148.0
+        ],
+        "params": {
+          "mu": 0.25,
+          "sigma": 0.2,
+          "dt": 0.002,
+          "threshold": 2.0
+        }
+      },
+      "expected": {
+        "steps": [
+          {
+            "surprise": 0.05590169943749474,
+            "z_score": -0.05590169943749474,
+            "log_return": 0.0,
+            "expected_return": 0.0005,
+            "anomaly": false
+          },
+          {
+            "surprise": 2.4864502324249473,
+            "z_score": 2.4864502324249473,
+            "log_return": 0.02273948696948934,
+            "expected_return": 0.0005,
+            "anomaly": true
+          },
+          {
+            "surprise": 42.73412358040789,
+            "z_score": 42.73412358040789,
+            "log_return": 0.382725621138675,
+            "expected_return": 0.0005,
+            "anomaly": true
+          },
+          {
+            "surprise": 1.556640995738911,
+            "z_score": -1.556640995738911,
+            "log_return": -0.013423020332140661,
+            "expected_return": 0.0005,
+            "anomaly": false
+          }
+        ]
+      },
+      "output_range": {
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ],
+        "expected_return": [
+          "-Inf",
+          "Inf"
+        ],
+        "length": "values.len() - 1"
+      },
+      "tolerance": 1e-06,
+      "notes": "Non-default sigma/dt/threshold (and nonzero mu) so all SurpriseParams fields affect goldens. expected_return = mu*dt = 0.25*0.002 = 0.0005. std_dev = sigma*sqrt(dt). threshold=2.0 flips anomaly on the mild 100\u2192102.3 step vs default threshold=3.0."
     },
     "entropy": {
       "input": {
-        "data": [1.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0],
+        "data": [
+          1.0,
+          2.0,
+          2.0,
+          3.0,
+          3.0,
+          3.0,
+          4.0,
+          4.0,
+          5.0,
+          6.0
+        ],
         "bins": 8
       },
-      "output_range": { "shannon": [0.0, "ln(bins)"], "relative": [0.0, 1.0] },
+      "output_range": {
+        "shannon": [
+          0.0,
+          "ln(bins)"
+        ],
+        "relative": [
+          0.0,
+          1.0
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "shannon in [0, ln(bins)]; relative in [0, 1]; bin_count <= bins."
     },
     "volatility": {
       "input": {
-        "abs_log_returns": [0.01, 0.02, 0.015, 0.03, 0.012, 0.025, 0.018],
+        "abs_log_returns": [
+          0.01,
+          0.02,
+          0.015,
+          0.03,
+          0.012,
+          0.025,
+          0.018
+        ],
         "window": 5
       },
-      "output_range": { "rms": [0.0, 1.0] },
+      "output_range": {
+        "rms": [
+          0.0,
+          1.0
+        ]
+      },
+      "tolerance": 1e-06,
       "notes": "Rolling RMS volatility sqrt(mean(r^2)) over the window, clamped to [0, 1]."
+    },
+    "signal_stats": {
+      "input": {
+        "data": [
+          1.0,
+          2.0,
+          3.0,
+          4.0,
+          5.0
+        ]
+      },
+      "expected": {
+        "mean": 3.0,
+        "variance": 2.0,
+        "skewness": 0.0,
+        "kurtosis": -1.3,
+        "count": 5
+      },
+      "output_range": {
+        "mean": [
+          "-Inf",
+          "Inf"
+        ],
+        "variance": [
+          0.0,
+          "Inf"
+        ],
+        "skewness": [
+          "-Inf",
+          "Inf"
+        ],
+        "kurtosis": [
+          "-Inf",
+          "Inf"
+        ],
+        "count": "data.len()"
+      },
+      "tolerance": 1e-06,
+      "notes": "compute_signal_stats uses population moments (divide by n). kurtosis is excess (Fisher): (m4/n)/var^2 - 3. Empty input yields all zeros with count=0. Compare floats within tolerance 1e-6."
+    },
+    "signal_stats_skewed": {
+      "input": {
+        "data": [
+          1.0,
+          2.0,
+          2.0,
+          3.0,
+          3.0,
+          3.0,
+          4.0,
+          4.0,
+          5.0,
+          10.0
+        ]
+      },
+      "expected": {
+        "mean": 3.7,
+        "variance": 5.61,
+        "skewness": 1.6689330728161367,
+        "kurtosis": 2.238725728502387,
+        "count": 10
+      },
+      "output_range": {
+        "mean": [
+          "-Inf",
+          "Inf"
+        ],
+        "variance": [
+          0.0,
+          "Inf"
+        ],
+        "skewness": [
+          0.0,
+          "Inf"
+        ],
+        "count": 10,
+        "kurtosis": [
+          "-Inf",
+          "Inf"
+        ]
+      },
+      "tolerance": 1e-06,
+      "notes": "Right-skewed series; skewness > 0 and excess kurtosis > 0. Same algorithm and tolerance as signal_stats."
     }
   }
 }
