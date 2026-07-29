@@ -178,6 +178,11 @@ fn surprise_sequence_drift_matches_fixture() {
 }
 
 #[test]
+fn surprise_sequence_nondefault_matches_fixture() {
+    assert_surprise_fixture("surprise_sequence_nondefault");
+}
+
+#[test]
 fn surprise_sequence_short_input_empty() {
     let params = SurpriseParams::<f64>::default();
     assert!(compute_surprise_sequence(&[100.0], &params).is_empty());

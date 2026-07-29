@@ -258,7 +258,7 @@
           3.2768665082710253,
           3.9650314305924654
         ],
-        "post_event_final_intensity": 2.0825157152962328
+        "post_event_final_intensity": 2.082515715296233
       },
       "output_range": {
         "intensities": [
@@ -429,6 +429,72 @@
       },
       "tolerance": 1e-06,
       "notes": "Nonzero drift: expected_return = mu * dt = 0.5 * 0.001 = 0.0005 on every step. z_score uses (log_return - expected_return) / (sigma * sqrt(dt))."
+    },
+    "surprise_sequence_nondefault": {
+      "input": {
+        "values": [
+          100.0,
+          100.0,
+          102.3,
+          150.0,
+          148.0
+        ],
+        "params": {
+          "mu": 0.25,
+          "sigma": 0.2,
+          "dt": 0.002,
+          "threshold": 2.0
+        }
+      },
+      "expected": {
+        "steps": [
+          {
+            "surprise": 0.05590169943749474,
+            "z_score": -0.05590169943749474,
+            "log_return": 0.0,
+            "expected_return": 0.0005,
+            "anomaly": false
+          },
+          {
+            "surprise": 2.4864502324249473,
+            "z_score": 2.4864502324249473,
+            "log_return": 0.02273948696948934,
+            "expected_return": 0.0005,
+            "anomaly": true
+          },
+          {
+            "surprise": 42.73412358040789,
+            "z_score": 42.73412358040789,
+            "log_return": 0.382725621138675,
+            "expected_return": 0.0005,
+            "anomaly": true
+          },
+          {
+            "surprise": 1.556640995738911,
+            "z_score": -1.556640995738911,
+            "log_return": -0.013423020332140661,
+            "expected_return": 0.0005,
+            "anomaly": false
+          }
+        ]
+      },
+      "output_range": {
+        "surprise": [
+          0.0,
+          "Inf"
+        ],
+        "z_score": [
+          "-Inf",
+          "Inf"
+        ],
+        "expected_return": [
+          "-Inf",
+          "Inf"
+        ],
+        "length": "values.len() - 1"
+      },
+      "tolerance": 1e-06,
+      "notes": "Non-default sigma/dt/threshold (and nonzero mu) so all SurpriseParams fields affect goldens. expected_return = mu*dt = 0.25*0.002 = 0.0005. std_dev = sigma*sqrt(dt). threshold=2.0 flips anomaly on the mild 100\u2192102.3 step vs default threshold=3.0."
     },
     "entropy": {
       "input": {

@@ -29,6 +29,7 @@ fn fixture_parses_and_documents_required_vector_keys() {
         "surprise",
         "surprise_sequence",
         "surprise_sequence_drift",
+        "surprise_sequence_nondefault",
         "entropy",
         "volatility",
         "signal_stats",
