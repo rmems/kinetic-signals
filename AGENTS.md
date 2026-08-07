@@ -2,7 +2,7 @@
 
 A Rust library crate for streaming signal feature extraction. Computes Hurst exponent, Hawkes process intensity, surprise anomaly detection, volatility, Shannon entropy, and technical indicators on high-velocity stochastic time-series.
 
-Part of the [Limen-Neural](https://github.com/Limen-Neural) ecosystem. See [`docs/boundary-matrix.md`](docs/boundary-matrix.md) for what this crate owns vs. neighboring crates.
+Part of the [rmems](https://github.com/rmems) ecosystem. See [`docs/boundary-matrix.md`](docs/boundary-matrix.md) for what this crate owns vs. neighboring crates.
 
 ## Repository map
 
