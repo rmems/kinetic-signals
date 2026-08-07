@@ -1,7 +1,7 @@
 # kinetic-signals
 
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
-[![codecov](https://codecov.io/gh/Limen-Neural/kinetic-signals/branch/main/graph/badge.svg)](https://codecov.io/gh/Limen-Neural/kinetic-signals)
+[![codecov](https://codecov.io/gh/rmems/kinetic-signals/branch/main/graph/badge.svg)](https://codecov.io/gh/rmems/kinetic-signals)
 
 Streaming feature extraction for high-velocity stochastic signals.
 
@@ -24,7 +24,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kinetic-signals = { git = "https://github.com/Limen-Neural/kinetic-signals" }
+kinetic-signals = { git = "https://github.com/rmems/kinetic-signals" }
 ```
 
 ## Usage
@@ -95,7 +95,7 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 cargo llvm-cov --all-features --workspace --open
 ```
 
-Coverage reports are automatically generated and uploaded to [Codecov](https://codecov.io/gh/Limen-Neural/kinetic-signals) in CI via the [coverage workflow](.github/workflows/coverage.yml) on every push to `main` and in pull requests. Results are also available via the badge at the top of this README.
+Coverage reports are automatically generated and uploaded to [Codecov](https://codecov.io/gh/rmems/kinetic-signals) in CI via the [coverage workflow](.github/workflows/coverage.yml) on every push to `main` and in pull requests. Results are also available via the badge at the top of this README.
 
 **CI workflows:**
 
@@ -198,7 +198,7 @@ Opt-in error monitoring via the optional `sentry` feature. Full guide: [`docs/se
 
 ```toml
 [dependencies]
-kinetic-signals = { git = "https://github.com/Limen-Neural/kinetic-signals", features = ["sentry"] }
+kinetic-signals = { git = "https://github.com/rmems/kinetic-signals", features = ["sentry"] }
 ```
 
 ```bash

@@ -10,7 +10,7 @@ Add the feature flag in your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kinetic-signals = { git = "https://github.com/Limen-Neural/kinetic-signals", features = ["sentry"] }
+kinetic-signals = { git = "https://github.com/rmems/kinetic-signals", features = ["sentry"] }
 ```
 
 Or when building this crate directly:
@@ -79,7 +79,7 @@ sentry = ["kinetic-signals/sentry"]
 [dependencies]
 # Prefer git until crates.io publish lands (#8 / LIM-193):
 kinetic-signals = {
-  git = "https://github.com/Limen-Neural/kinetic-signals",
+  git = "https://github.com/rmems/kinetic-signals",
   features = ["sentry"],
 }
 # After publish: kinetic-signals = { version = "0.4", features = ["sentry"] }
