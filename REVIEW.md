@@ -82,11 +82,17 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Breaking changes
 
-When removing or renaming public items:
+Full policy: [`README.md#pre-1.0-semver--stability-policy`](README.md#pre-1.0-semver--stability-policy).
+
+Public API = everything reachable from the crate root, from a `pub mod`, or
+via `prelude`. When a change to any of those surfaces is breaking (removing
+or renaming a public item, changing a signature, tightening a precondition,
+narrowing a trait bound):
 
 1. Bump the version (pre-1.0: minor `0.X.0` → `0.(X+1).0`; post-1.0: major `X.Y.Z` → `(X+1).0.0`)
-2. Add migration guide to README
+2. Add a migration guide to README (see "Upgrading from v0.3.x" for the format)
 3. Update `docs/boundary-matrix.md` if applicable
+4. Update `CHANGELOG.md` (once introduced — see the release-documentation issue under #8) with the breaking change under a "Breaking" heading
 
 ## Cross-repo handoff
 

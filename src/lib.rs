@@ -79,6 +79,13 @@ pub use surprise::{
 };
 pub use volatility::VolEstimator;
 
+/// Convenience glob-import of every public type and function.
+///
+/// The prelude is covered by the crate's pre-1.0 SemVer policy (see
+/// `README.md#pre-1.0-semver--stability-policy`): adding a new public item to
+/// any module extends the prelude and is not a breaking change, but removing
+/// or renaming an item exported here follows the same breaking-change rules
+/// as removing it from its owning module.
 pub mod prelude {
     pub use crate::entropy::*;
     pub use crate::hawkes::*;

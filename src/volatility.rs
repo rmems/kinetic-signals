@@ -26,6 +26,10 @@ pub struct VolEstimator {
 
 impl VolEstimator {
     /// Create a new estimator with the given window size.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `capacity` is `0`.
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "capacity must be > 0");
         Self {

@@ -58,6 +58,18 @@ impl Default for HawkesParams {
 /// Estimate Hawkes intensity at the last event from a full event-time history.
 ///
 /// Returns baseline intensity alone when `event_times` is empty.
+///
+/// # Example
+///
+/// ```rust
+/// use kinetic_signals::{HawkesParams, compute_hawkes};
+///
+/// let params = HawkesParams::default();
+/// let events = vec![0.0, 0.01, 0.02, 0.1, 0.5];
+/// let result = compute_hawkes(&events, &params);
+/// assert!(result.intensity >= params.mu);
+/// assert_eq!(result.event_count, events.len());
+/// ```
 pub fn compute_hawkes(event_times: &[f64], params: &HawkesParams) -> HawkesResult {
     if event_times.is_empty() {
         return HawkesResult {
