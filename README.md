@@ -157,12 +157,17 @@ for that stage:
 
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
-or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html).
-The crate root and `pub mod` surfaces are kept in sync with the `prelude`,
-with one deliberate exception: `init_sentry` (crate-root, `sentry`-feature-gated
-setup/observability plumbing) is intentionally not re-exported from the
-prelude — see `src/lib.rs`'s `pub use` block and the `prelude` module's own
-doc comment.
+or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html) —
+**and** the Cargo feature names in `[features]` (currently `sentry`). A
+downstream `Cargo.toml` can depend on a feature name directly (e.g.
+`features = ["sentry"]`); removing or renaming one breaks that manifest even
+if every Rust item it gates stays available under a replacement feature, so
+feature removal/renaming follows the same breaking-change rules as removing
+a public item. The crate root and `pub mod` surfaces are kept in sync with
+the `prelude`, with one deliberate exception: `init_sentry` (crate-root,
+`sentry`-feature-gated setup/observability plumbing) is intentionally not
+re-exported from the prelude — see `src/lib.rs`'s `pub use` block and the
+`prelude` module's own doc comment.
 
 **Generic scalar types:** `compute_hurst`, `compute_surprise`,
 `compute_surprise_sequence`, and `detect_anomaly` are generic over a sealed,
