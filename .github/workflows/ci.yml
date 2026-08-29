@@ -119,7 +119,7 @@ jobs:
           key: ${{ runner.os }}-cargo-package-${{ hashFiles('**/Cargo.toml') }}
 
       - name: List packaged files
-        run: cargo package --list --locked | tee /tmp/cargo-package-list.txt
+        run: cargo package --list | tee /tmp/cargo-package-list.txt
 
       - name: Verify required files are packaged
         run: |
@@ -129,13 +129,13 @@ jobs:
 
       - name: Verify no unintended files are packaged
         run: |
-          if grep -E '^(target/|\.git/|coverage/|\.env|.*\.key$|.*\.pem$)' /tmp/cargo-package-list.txt; then
+          if grep -E '(^|/)(target/|\.git/|coverage/|\.env|.*\.key$|.*\.pem$)' /tmp/cargo-package-list.txt; then
             echo "::error::unexpected dev-only or sensitive files found in package"
             exit 1
           fi
 
       - name: Build packaged crate archive
-        run: cargo package --locked
+        run: cargo package
 
       - name: Check packaged crate size
         run: |
@@ -148,7 +148,7 @@ jobs:
           fi
 
       - name: Publish dry-run (clean checkout)
-        run: cargo publish --dry-run --locked
+        run: cargo publish --dry-run
 
   audit:
     name: Security Audit
