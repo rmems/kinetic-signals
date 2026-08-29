@@ -85,9 +85,11 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 Full policy: the "Pre-1.0 SemVer / Stability Policy" section of [`README.md`](README.md).
 
 Public API = everything reachable from the crate root, from a `pub mod`, or
-via `prelude`. When a change to any of those surfaces is breaking (removing
-or renaming a public item, changing a signature, tightening a precondition,
-narrowing a trait bound):
+via `prelude` — **and** the Cargo feature names in `[features]`. When a change
+to any of those surfaces is breaking (removing or renaming a public item,
+changing a signature, tightening a precondition, narrowing a trait bound,
+removing or renaming a feature even if everything it gates stays available
+under a replacement name):
 
 1. Bump the version (pre-1.0: minor `0.X.0` → `0.(X+1).0`; post-1.0: major `X.Y.Z` → `(X+1).0.0`)
 2. Add a migration guide to README (see "Upgrading from v0.3.x" for the format)
