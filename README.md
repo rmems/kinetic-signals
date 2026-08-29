@@ -147,16 +147,21 @@ for that stage:
   removing or renaming a public item, changing a function signature, tightening
   a precondition, or changing a trait bound on a public generic function.
   Adding a *new* public function or struct is usually **not** breaking and may
-  also ship in a minor bump. Three additions are the exception, needing the
+  also ship in a minor bump. Four additions are the exception, needing the
   same compatibility review as a breaking change rather than an automatic
   minor bump: an inherent method or a trait impl (can shadow a downstream
-  trait method or make method resolution/type inference ambiguous), and a
+  trait method or make method resolution/type inference ambiguous); a
   **field on an existing public struct** (none of this crate's public structs
   are `#[non_exhaustive]`, so a new field breaks a downstream full struct
   literal, e.g. `HawkesParams { mu: 1.0, alpha: 0.5, beta: 1.0, dt: 0.01 }`,
   or an exhaustive destructure without `..`, e.g. `let HawkesParams { mu,
   alpha, beta, dt } = p;` — a destructure or literal that already uses `..`
-  is unaffected, since `..` matches/fills any remaining fields).
+  is unaffected, since `..` matches/fills any remaining fields); and **any new
+  item added to a module re-exported by `prelude`** (the prelude re-exports
+  via glob, `pub use ...::*`, so a new name can collide with a downstream
+  glob import that combines `kinetic_signals::prelude::*` with another
+  glob exporting the same name — see the `prelude` module's own doc comment
+  in `src/lib.rs`).
 - Once the crate reaches `1.0.0`, standard SemVer applies (breaking changes
   require a major bump).
 
