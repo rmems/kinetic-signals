@@ -97,8 +97,10 @@ SENTRY_DSN=https://...@... cargo run --example demo --features sentry
 - **Relationships:** Wire native GitHub links, not just prose — sub-issue parent
   hierarchy (`sub_issue_write` / `gh issue edit --parent`), issue blocked-by/blocking
   (`gh issue edit --add-blocked-by`/`--add-blocking`; issues only, no such relationship
-  exists for PRs), and a PR's `Closes #<n>` in its own body (the only native
-  relationship a PR itself supports). A `## Relationships` section in the body is a
+  exists for PRs; both need `gh` 2.94.0+), and a PR's `Closes #<n>` in its own body
+  (the only native relationship a PR itself supports — GraphQL has no separate
+  mutation for it; a closing keyword only creates the link when the PR targets the
+  repo's default branch). A `## Relationships` section in the body is a
   human-readable summary, not a substitute for the native link.
 - **Metadata:** Every issue and PR gets an assignee (default: the repo owner,
   `rmems`), labels matching the repo's existing vocabulary for that kind of change

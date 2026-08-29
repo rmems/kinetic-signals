@@ -92,7 +92,8 @@ item, changing a signature, tightening a precondition, narrowing a trait
 bound, removing an existing trait impl, adding a field to an existing public
 struct — none of this crate's public structs are `#[non_exhaustive]` — or
 removing/renaming a feature even if everything it gates stays available
-under a replacement name):
+under a replacement name; adding an inherent method or a new trait impl,
+which can shadow a downstream method or introduce resolution ambiguity):
 
 1. Bump the version (pre-1.0: minor `0.X.0` → `0.(X+1).0`; post-1.0: major `X.Y.Z` → `(X+1).0.0`)
 2. Add a migration guide to README (see "Upgrading from v0.3.x" for the format)
