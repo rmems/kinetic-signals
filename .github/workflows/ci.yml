@@ -139,7 +139,7 @@ jobs:
 
       - name: Check packaged crate size
         run: |
-          size=$(stat -c%s target/package/kinetic-signals-*.crate)
+          size=$(stat -c %s target/package/kinetic-signals-*.crate)
           echo "Packaged .crate size: ${size} bytes"
           max=$((10 * 1024 * 1024))
           if [ "$size" -gt "$max" ]; then
