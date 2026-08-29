@@ -82,7 +82,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Breaking changes
 
-Full policy: [`README.md#pre-1.0-semver--stability-policy`](README.md#pre-1.0-semver--stability-policy).
+Full policy: the "Pre-1.0 SemVer / Stability Policy" section of [`README.md`](README.md).
 
 Public API = everything reachable from the crate root, from a `pub mod`, or
 via `prelude`. When a change to any of those surfaces is breaking (removing

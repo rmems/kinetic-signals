@@ -165,10 +165,14 @@ implementable trait, so it is not itself part of the public API and adding
 required methods to it is not a breaking change as long as `f32`/`f64` support
 is preserved.
 
-**Thread safety:** every public stateful type (results, params, and
-estimators such as [`VolEstimator`]) is `Send + Sync`. This is enforced by a
-compile-time assertion in `src/lib.rs`; removing that guarantee for an
-existing type would be a breaking change.
+**Thread safety:** every concrete type the crate's own functions produce or
+accept (results, params, and estimators such as [`VolEstimator`], including
+the `f32`/`f64` instantiations of the generic `Hurst`/`Surprise` types) is
+`Send + Sync`. This is enforced by a compile-time assertion in `src/lib.rs`;
+removing that guarantee for an existing type would be a breaking change.
+Note this covers the instantiations the crate actually uses, not every
+theoretically possible instantiation of the unconstrained generic structs
+(e.g. `SurpriseResult<T>`) with an arbitrary caller-supplied `T`.
 
 See [`REVIEW.md`](REVIEW.md#breaking-changes) for the contributor-facing
 checklist to follow when making a breaking change.
