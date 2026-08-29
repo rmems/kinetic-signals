@@ -146,19 +146,24 @@ for that stage:
 - **Minor (`0.X.0`)** — anything that would be a breaking change post-1.0:
   removing or renaming a public item, changing a function signature, tightening
   a precondition, or changing a trait bound on a public generic function.
-  Adding a *new* public item (function, struct) is usually **not** breaking and
-  may also ship in a minor bump. Adding an inherent method or a trait impl is
-  the exception: it can shadow a downstream trait method or make method
-  resolution/type inference ambiguous for existing callers, so those still
-  need the same compatibility review as a breaking change, not an automatic
-  minor bump.
+  Adding a *new* public function or struct is usually **not** breaking and may
+  also ship in a minor bump. Three additions are the exception, needing the
+  same compatibility review as a breaking change rather than an automatic
+  minor bump: an inherent method or a trait impl (can shadow a downstream
+  trait method or make method resolution/type inference ambiguous), and a
+  **field on an existing public struct** (none of this crate's public structs
+  are `#[non_exhaustive]`, so a new field breaks downstream struct-literal
+  construction and exhaustive pattern matches, e.g. `HawkesParams { .. }`).
 - Once the crate reaches `1.0.0`, standard SemVer applies (breaking changes
   require a major bump).
 
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
-or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html) —
-**and** the Cargo feature names in `[features]` (currently `sentry`). A
+or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html);
+the Cargo feature names in `[features]` (currently `sentry`); and every
+**existing** trait implementation on a public type (e.g. `Default` for
+`HawkesParams`, `Clone` for the result structs) — removing one breaks
+downstream code that relies on it, the same as removing a function. A
 downstream `Cargo.toml` can depend on a feature name directly (e.g.
 `features = ["sentry"]`); removing or renaming one breaks that manifest even
 if every Rust item it gates stays available under a replacement feature, so
