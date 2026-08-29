@@ -152,8 +152,11 @@ for that stage:
   minor bump: an inherent method or a trait impl (can shadow a downstream
   trait method or make method resolution/type inference ambiguous), and a
   **field on an existing public struct** (none of this crate's public structs
-  are `#[non_exhaustive]`, so a new field breaks downstream struct-literal
-  construction and exhaustive pattern matches, e.g. `HawkesParams { .. }`).
+  are `#[non_exhaustive]`, so a new field breaks a downstream full struct
+  literal, e.g. `HawkesParams { mu: 1.0, alpha: 0.5, beta: 1.0, dt: 0.01 }`,
+  or an exhaustive destructure without `..`, e.g. `let HawkesParams { mu,
+  alpha, beta, dt } = p;` — a destructure or literal that already uses `..`
+  is unaffected, since `..` matches/fills any remaining fields).
 - Once the crate reaches `1.0.0`, standard SemVer applies (breaking changes
   require a major bump).
 
