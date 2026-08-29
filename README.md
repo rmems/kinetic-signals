@@ -146,16 +146,23 @@ for that stage:
 - **Minor (`0.X.0`)** — anything that would be a breaking change post-1.0:
   removing or renaming a public item, changing a function signature, tightening
   a precondition, or changing a trait bound on a public generic function.
-  Adding a *new* public item (function, struct, field-preserving impl) is
-  **not** breaking and may also ship in a minor bump.
+  Adding a *new* public item (function, struct) is usually **not** breaking and
+  may also ship in a minor bump. Adding an inherent method or a trait impl is
+  the exception: it can shadow a downstream trait method or make method
+  resolution/type inference ambiguous for existing callers, so those still
+  need the same compatibility review as a breaking change, not an automatic
+  minor bump.
 - Once the crate reaches `1.0.0`, standard SemVer applies (breaking changes
   require a major bump).
 
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
 or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html).
-All three surfaces are kept in sync — see `src/lib.rs`'s `pub use` block and
-the `prelude` module.
+The crate root and `pub mod` surfaces are kept in sync with the `prelude`,
+with one deliberate exception: `init_sentry` (crate-root, `sentry`-feature-gated
+setup/observability plumbing) is intentionally not re-exported from the
+prelude — see `src/lib.rs`'s `pub use` block and the `prelude` module's own
+doc comment.
 
 **Generic scalar types:** `compute_hurst`, `compute_surprise`,
 `compute_surprise_sequence`, and `detect_anomaly` are generic over a sealed,

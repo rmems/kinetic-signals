@@ -81,7 +81,7 @@ pub use volatility::VolEstimator;
 
 /// Convenience glob-import of every public type and function from the
 /// crate's computation modules (entropy, hawkes, hurst, indicators, stats,
-/// surprise, volatility). [`init_sentry`], a crate-root utility gated behind
+/// surprise, volatility). `init_sentry`, a crate-root utility gated behind
 /// the `sentry` feature, is intentionally **not** re-exported here: it is
 /// setup/observability plumbing, not a signal-processing primitive.
 ///
