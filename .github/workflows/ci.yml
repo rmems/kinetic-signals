@@ -96,6 +96,60 @@ jobs:
       - name: Test (no features)
         run: cargo test --no-default-features
 
+  package:
+    name: Package & Publish Dry-Run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-package-${{ hashFiles('**/Cargo.toml') }}
+
+      - name: List packaged files
+        run: cargo package --list --locked | tee /tmp/cargo-package-list.txt
+
+      - name: Verify required files are packaged
+        run: |
+          for f in LICENSE-MIT LICENSE-APACHE-2.0 README.md Cargo.toml src/lib.rs; do
+            grep -qxF "$f" /tmp/cargo-package-list.txt || { echo "::error::required file missing from package: $f"; exit 1; }
+          done
+
+      - name: Verify no unintended files are packaged
+        run: |
+          if grep -E '^(target/|\.git/|coverage/|\.env|.*\.key$|.*\.pem$)' /tmp/cargo-package-list.txt; then
+            echo "::error::unexpected dev-only or sensitive files found in package"
+            exit 1
+          fi
+
+      - name: Build packaged crate archive
+        run: cargo package --locked
+
+      - name: Check packaged crate size
+        run: |
+          size=$(stat -c%s target/package/kinetic-signals-*.crate)
+          echo "Packaged .crate size: ${size} bytes"
+          max=$((10 * 1024 * 1024))
+          if [ "$size" -gt "$max" ]; then
+            echo "::error::packaged crate exceeds 10MiB (${size} bytes)"
+            exit 1
+          fi
+
+      - name: Publish dry-run (clean checkout)
+        run: cargo publish --dry-run --locked
+
   audit:
     name: Security Audit
     runs-on: ubuntu-latest
