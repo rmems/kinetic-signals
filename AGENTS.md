@@ -92,6 +92,26 @@ SENTRY_DSN=https://...@... cargo run --example demo --features sentry
 - **Breaking changes:** Bump version for removed/renamed public items (see REVIEW.md for semver rules)
 - **Required:** All CI checks must pass and zero unresolved review threads before merge. Exceptions: docs-only PRs may skip coverage checks; maintainer approval required for any override.
 
+## GitHub issue/PR hygiene
+
+- **Relationships:** Wire native GitHub links, not just prose — sub-issue parent
+  hierarchy (`sub_issue_write` / `gh issue edit --parent`), issue blocked-by/blocking
+  (`gh issue edit --add-blocked-by`/`--add-blocking`; issues only, no such relationship
+  exists for PRs), and a PR's `Closes #<n>` in its own body (the only native
+  relationship a PR itself supports). A `## Relationships` section in the body is a
+  human-readable summary, not a substitute for the native link.
+- **Metadata:** Every issue and PR gets an assignee (default: the repo owner,
+  `rmems`), labels matching the repo's existing vocabulary for that kind of change
+  (see labels on comparable issues — e.g. a CI-only change uses `chore` + `CI/CD`), and
+  the current open milestone (`kinetic-signals — active`). `issue_write` sets these
+  for issues; PRs need `gh pr edit --add-assignee/--add-label/--milestone` since
+  `create_pull_request`/`update_pull_request` have no fields for any of them.
+- **Commits:** Every commit carries the standing attribution trailer
+  (`Co-Authored-By: Claude ... <noreply@anthropic.com>` or the equivalent for whichever
+  model authored it) — including the first commit on a new branch.
+- Full detail, verification commands, and the reasoning behind each of these: the
+  `github-issue-pr-hygiene` global Claude Code skill.
+
 ## Cursor Cloud specific instructions
 
 Standard commands are documented in the **Build & test** and **Running the demo** sections above. The notes below cover the less obvious environment caveats.
