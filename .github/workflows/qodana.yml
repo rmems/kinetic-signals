@@ -10,9 +10,10 @@ on:
 jobs:
   qodana:
     runs-on: ubuntu-latest
-    # Fork PRs don't receive repository secrets, so QODANA_TOKEN is empty and
-    # the scan would fail every external contribution's required check.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs, and same-repo Dependabot PRs (GitHub withholds secrets from
+    # both), don't receive QODANA_TOKEN -- the scan would fail every such
+    # PR's required check.
+    if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')
     permissions:
       contents: write
       pull-requests: write
