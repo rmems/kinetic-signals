@@ -10,6 +10,9 @@
 //! This is a generic signal-processing primitive: it makes no financial-domain
 //! assumptions. It can be applied to any strictly positive signal (sensor
 //! magnitudes, firing rates, power readings, asset prices, etc.).
+//!
+//! Supports any scalar type implementing the crate's private `Real` trait
+//! (`f32` / `f64`).
 
 use crate::real::Real;
 
@@ -57,6 +60,19 @@ where
 ///
 /// Returns a zeroed result (no surprise) if either value is non-positive,
 /// since the log-ratio is undefined for non-positive inputs.
+///
+/// # Example
+///
+/// ```rust
+/// use kinetic_signals::{SurpriseParams, compute_surprise, detect_anomaly};
+///
+/// let params = SurpriseParams::default();
+/// let result = compute_surprise(150.0, 100.0, &params);
+/// assert!(result.surprise >= 0.0);
+/// if detect_anomaly(&result, &params) {
+///     println!("anomalous transition: z = {:.2}", result.z_score);
+/// }
+/// ```
 pub fn compute_surprise<T>(
     current_value: T,
     previous_value: T,

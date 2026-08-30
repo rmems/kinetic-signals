@@ -79,6 +79,21 @@ pub use surprise::{
 };
 pub use volatility::VolEstimator;
 
+/// Convenience glob-import of every public type and function from the
+/// crate's computation modules (entropy, hawkes, hurst, indicators, stats,
+/// surprise, volatility). `init_sentry`, a crate-root utility gated behind
+/// the `sentry` feature, is intentionally **not** re-exported here: it is
+/// setup/observability plumbing, not a signal-processing primitive.
+///
+/// The prelude is covered by the crate's pre-1.0 SemVer policy (see the
+/// "Pre-1.0 SemVer / Stability Policy" section of `README.md`): removing or
+/// renaming an item exported here follows the same breaking-change rules as
+/// removing it from its owning module. Adding a new public item is usually
+/// safe, but because the prelude re-exports via glob (`pub use ...::*`), a
+/// new name can still collide with a downstream glob import, and a new
+/// trait implementation can make previously-unambiguous method calls
+/// ambiguous; treat such additions with the same compatibility review as
+/// any other public API change.
 pub mod prelude {
     pub use crate::entropy::*;
     pub use crate::hawkes::*;

@@ -60,8 +60,11 @@ impl EMA {
 
 /// Z-score tracking helper for signal normalization.
 ///
-/// Holds optional running mean / std-dev state; the primary entry point is the
-/// static [`compute`](ZScore::compute) method.
+/// `mean`/`std_dev` are a caller-managed value pair (e.g. from an upstream
+/// mean/variance tracker) kept alongside the crate's other stateful types;
+/// they are not read by [`compute`](ZScore::compute), which is a pure
+/// function of its three arguments and does not require constructing a
+/// `ZScore` value at all.
 #[derive(Debug, Clone)]
 pub struct ZScore {
     /// Reference mean (caller-managed; not updated automatically).

@@ -136,6 +136,72 @@ v0.4.0 removes the deprecated GBM aliases. Replace with the domain-agnostic name
 | `GBMResult`                      | `SurpriseResult`           |
 | `gbm::detect_anomaly`            | `surprise::detect_anomaly` |
 
+## Pre-1.0 SemVer / Stability Policy
+
+`kinetic-signals` is pre-1.0 (`0.x.y`) and follows the Cargo/SemVer convention
+for that stage:
+
+- **Patch (`0.x.Y`)** — backwards-compatible fixes only: bug fixes, doc
+  improvements, performance work, new tests. No public API changes.
+- **Minor (`0.X.0`)** — anything that would be a breaking change post-1.0:
+  removing or renaming a public item, changing a function signature, tightening
+  a precondition, or changing a trait bound on a public generic function.
+  Adding a *new* public function or struct is usually **not** breaking and may
+  also ship in a minor bump. Four additions are the exception, needing the
+  same compatibility review as a breaking change rather than an automatic
+  minor bump: an inherent method or a trait impl (can shadow a downstream
+  trait method or make method resolution/type inference ambiguous); a
+  **field on an existing public struct** (none of this crate's public structs
+  are `#[non_exhaustive]`, so a new field breaks a downstream full struct
+  literal, e.g. `HawkesParams { mu: 1.0, alpha: 0.5, beta: 1.0, dt: 0.01 }`,
+  or an exhaustive destructure without `..`, e.g. `let HawkesParams { mu,
+  alpha, beta, dt } = p;` — a destructure or literal that already uses `..`
+  is unaffected, since `..` matches/fills any remaining fields); and **any new
+  item added to a module re-exported by `prelude`** (the prelude re-exports
+  via glob, `pub use ...::*`, so a new name can collide with a downstream
+  glob import that combines `kinetic_signals::prelude::*` with another
+  glob exporting the same name — see the `prelude` module's own doc comment
+  in `src/lib.rs`).
+- Once the crate reaches `1.0.0`, standard SemVer applies (breaking changes
+  require a major bump).
+
+**What counts as public API:** every item reachable from the crate root
+(`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
+or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html);
+the Cargo feature names in `[features]` (currently `sentry`); and every
+**existing** trait implementation on a public type (e.g. `Default` for
+`HawkesParams`, `Clone` for the result structs) — removing one breaks
+downstream code that relies on it, the same as removing a function. A
+downstream `Cargo.toml` can depend on a feature name directly (e.g.
+`features = ["sentry"]`); removing or renaming one breaks that manifest even
+if every Rust item it gates stays available under a replacement feature, so
+feature removal/renaming follows the same breaking-change rules as removing
+a public item. The crate root and `pub mod` surfaces are kept in sync with
+the `prelude`, with one deliberate exception: `init_sentry` (crate-root,
+`sentry`-feature-gated setup/observability plumbing) is intentionally not
+re-exported from the prelude — see `src/lib.rs`'s `pub use` block and the
+`prelude` module's own doc comment.
+
+**Generic scalar types:** `compute_hurst`, `compute_surprise`,
+`compute_surprise_sequence`, and `detect_anomaly` are generic over a sealed,
+crate-private `Real` trait implemented only for `f32`/`f64`. This is
+intentional: it lets the crate support both float widths without exposing an
+implementable trait, so it is not itself part of the public API and adding
+required methods to it is not a breaking change as long as `f32`/`f64` support
+is preserved.
+
+**Thread safety:** every concrete type the crate's own functions produce or
+accept (results, params, and estimators such as [`VolEstimator`], including
+the `f32`/`f64` instantiations of the generic `Hurst`/`Surprise` types) is
+`Send + Sync`. This is enforced by a compile-time assertion in `src/lib.rs`;
+removing that guarantee for an existing type would be a breaking change.
+Note this covers the instantiations the crate actually uses, not every
+theoretically possible instantiation of the unconstrained generic structs
+(e.g. `SurpriseResult<T>`) with an arbitrary caller-supplied `T`.
+
+See [`REVIEW.md`](REVIEW.md#breaking-changes) for the contributor-facing
+checklist to follow when making a breaking change.
+
 ## Cross-language output ranges (SpikeStream.jl alignment)
 
 To keep experimental results consistent between this crate and the Julia

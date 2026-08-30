@@ -82,11 +82,25 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Breaking changes
 
-When removing or renaming public items:
+Full policy: the "Pre-1.0 SemVer / Stability Policy" section of [`README.md`](README.md).
+
+Public API = everything reachable from the crate root, from a `pub mod`, or
+via `prelude`; the Cargo feature names in `[features]`; and every existing
+trait implementation on a public type (e.g. `Default`, `Clone`). When a
+change to any of those surfaces is breaking (removing or renaming a public
+item, changing a signature, tightening a precondition, narrowing a trait
+bound, removing an existing trait impl, adding a field to an existing public
+struct — none of this crate's public structs are `#[non_exhaustive]` — or
+removing/renaming a feature even if everything it gates stays available
+under a replacement name; adding an inherent method or a new trait impl,
+which can shadow a downstream method or introduce resolution ambiguity; or
+adding any new item to a module re-exported by `prelude`, since its glob
+re-export can collide with a downstream glob import of the same name):
 
 1. Bump the version (pre-1.0: minor `0.X.0` → `0.(X+1).0`; post-1.0: major `X.Y.Z` → `(X+1).0.0`)
-2. Add migration guide to README
+2. Add a migration guide to README (see "Upgrading from v0.3.x" for the format)
 3. Update `docs/boundary-matrix.md` if applicable
+4. Update `CHANGELOG.md` (once introduced — see the release-documentation issue under #8) with the breaking change under a "Breaking" heading
 
 ## Cross-repo handoff
 
