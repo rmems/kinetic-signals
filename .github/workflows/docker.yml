@@ -35,4 +35,3 @@ jobs:
         run: |
           docker build --target builder -t kinetic-signals:builder .
           docker run --rm kinetic-signals:builder cargo test --all-features
-          docker run --rm kinetic-signals:builder cargo check --features sentry
