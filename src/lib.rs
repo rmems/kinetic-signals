@@ -44,31 +44,6 @@ pub mod stats;
 pub mod surprise;
 pub mod volatility;
 
-/// Initialize Sentry from the `SENTRY_DSN` environment variable.
-///
-/// Returns `Some(guard)` if the DSN is set and non-empty, `None` otherwise.
-/// The guard must be kept alive for the duration of the program — when dropped,
-/// Sentry flushes pending events (up to 2 seconds).
-///
-/// Only available when the `sentry` feature is enabled.
-#[cfg(feature = "sentry")]
-pub fn init_sentry() -> Option<sentry::ClientInitGuard> {
-    // SAFETY: env::var is safe; only env::set_var/remove_var are unsafe in edition 2024.
-    match std::env::var("SENTRY_DSN") {
-        Ok(dsn) if !dsn.is_empty() => {
-            let guard = sentry::init((
-                dsn,
-                sentry::ClientOptions {
-                    release: sentry::release_name!(),
-                    ..Default::default()
-                },
-            ));
-            Some(guard)
-        }
-        _ => None,
-    }
-}
-
 pub use entropy::{EntropyResult, compute_shannon_entropy};
 pub use hawkes::{HawkesParams, HawkesResult, compute_hawkes, compute_hawkes_streaming};
 pub use hurst::{HurstResult, compute_hurst};
@@ -81,9 +56,8 @@ pub use volatility::VolEstimator;
 
 /// Convenience glob-import of every public type and function from the
 /// crate's computation modules (entropy, hawkes, hurst, indicators, stats,
-/// surprise, volatility). `init_sentry`, a crate-root utility gated behind
-/// the `sentry` feature, is intentionally **not** re-exported here: it is
-/// setup/observability plumbing, not a signal-processing primitive.
+/// surprise, volatility). Application-level observability integrations are
+/// intentionally outside this signal-processing crate.
 ///
 /// The prelude is covered by the crate's pre-1.0 SemVer policy (see the
 /// "Pre-1.0 SemVer / Stability Policy" section of `README.md`): removing or

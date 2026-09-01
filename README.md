@@ -9,7 +9,7 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 
 ## Features
 
-- **Zero required dependencies** - No external crates by default; optional `sentry` feature available
+- **Zero runtime dependencies** - The crate is self-contained; consuming applications own observability integrations
 - **Hurst Exponent** - Detects long-term memory and persistence in time-series data
 - **Hawkes Process** - Models self-exciting event clusters in point-process streams
 - **Surprise** - Detects anomalous transition magnitudes via normalized log-ratio z-scores
@@ -90,7 +90,7 @@ The complete release validation sequence is in the
 validates the package without uploading it.
 
 ```bash
-# Build and test (--all-features requires network for sentry crate download)
+# Build and test
 cargo build
 cargo test --all-features
 
@@ -98,8 +98,6 @@ cargo test --all-features
 cargo clippy --all-targets --all-features
 cargo fmt
 
-# Run with sentry error reporting
-SENTRY_DSN=https://...@... cargo run --example demo --features sentry
 ```
 
 **Test coverage** (requires `cargo-llvm-cov`):
@@ -119,7 +117,6 @@ Coverage reports are automatically generated and uploaded to [Codecov](https://c
 - [Build & Test](.github/workflows/ci.yml) — fmt, clippy, build, test
 - [Coverage](.github/workflows/coverage.yml) — cargo-llvm-cov + Codecov upload
 - [Docker](.github/workflows/docker.yml) — containerized build + test
-- [Sentry Release](.github/workflows/sentry-release.yml) — creates Sentry release on tag push
 
 **Docker** (reproducible build):
 
@@ -185,19 +182,12 @@ for that stage:
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
 or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html);
-the Cargo feature names in `[features]` (currently `sentry`); and every
+the Cargo feature names in `[features]`; and every
 **existing** trait implementation on a public type (e.g. `Default` for
 `HawkesParams`, `Clone` for the result structs) — removing one breaks
 downstream code that relies on it, the same as removing a function. A
-downstream `Cargo.toml` can depend on a feature name directly (e.g.
-`features = ["sentry"]`); removing or renaming one breaks that manifest even
-if every Rust item it gates stays available under a replacement feature, so
-feature removal/renaming follows the same breaking-change rules as removing
 a public item. The crate root and `pub mod` surfaces are kept in sync with
-the `prelude`, with one deliberate exception: `init_sentry` (crate-root,
-`sentry`-feature-gated setup/observability plumbing) is intentionally not
-re-exported from the prelude — see `src/lib.rs`'s `pub use` block and the
-`prelude` module's own doc comment.
+the `prelude`.
 
 **Generic scalar types:** `compute_hurst`, `compute_surprise`,
 `compute_surprise_sequence`, and `detect_anomaly` are generic over a sealed,
@@ -273,33 +263,11 @@ Licensed under either of
 
 at your option.
 
-## Observability (optional Sentry)
+## Observability
 
-Opt-in error monitoring via the optional `sentry` feature. Full guide: [`docs/sentry.md`](docs/sentry.md).
-
-**Setup** — enable the feature and set a DSN:
-
-```toml
-[dependencies]
-kinetic-signals = { git = "https://github.com/rmems/kinetic-signals", features = ["sentry"] }
-```
-
-```bash
-export SENTRY_DSN=https://...@...
-```
-
-**Usage** — call `init_sentry()` once and keep the guard for the process lifetime (flush on drop, up to 2s):
-
-```rust
-// Requires kinetic-signals built with `features = ["sentry"]` (see docs/sentry.md).
-let _guard = kinetic_signals::init_sentry();
-```
-
-- Returns `Some(ClientInitGuard)` when `SENTRY_DSN` is set and non-empty; `None` otherwise.
-- Release is set via `sentry::release_name!()` → `CARGO_PKG_NAME@CARGO_PKG_VERSION` (e.g. `kinetic-signals@0.4.0`).
-- Tag pushes `v*` create matching Sentry releases (`kinetic-signals@X.Y.Z`) via [sentry-release.yml](.github/workflows/sentry-release.yml).
-
-Sentry is **never** initialized unless the feature is enabled and the DSN is present. No data is sent by default.
+Observability integrations are intentionally owned by consuming applications.
+`kinetic-signals` performs signal feature extraction and does not initialize
+telemetry clients or send network events.
 
 ## Authors
 

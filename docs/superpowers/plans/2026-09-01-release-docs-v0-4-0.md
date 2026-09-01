@@ -32,7 +32,7 @@
 
 - [ ] **Step 1: Write the changelog content**
 
-Create an `Unreleased` section and a dated `0.4.0` section. The v0.4.0 entry must cover the domain-neutral API rename, Hurst/Hawkes/surprise/entropy/statistics/indicators/volatility APIs, shared SpikeStream.jl vectors, Rust/MSRV/no-default-features/audit/coverage/Docker/Qodana gates, optional Sentry integration, README/rustdoc work, and the dual-license registry metadata.
+Create an `Unreleased` section and a dated `0.4.0` section. The v0.4.0 entry must cover the domain-neutral API rename, Hurst/Hawkes/surprise/entropy/statistics/indicators/volatility APIs, shared SpikeStream.jl vectors, Rust/MSRV/no-default-features/audit/coverage/Docker/Qodana gates, observability ownership by consuming applications, README/rustdoc work, and the dual-license registry metadata.
 
 Add a `Release checklist` section with explicit commands and gates for version consistency, formatting, tests, clippy, package contents, `cargo publish --dry-run`, crates.io publication, docs.rs verification, exact tag, GitHub Release, README transition, and credential safety.
 
@@ -57,7 +57,6 @@ git commit -m "docs: add v0.4.0 changelog and release policy"
 
 **Files:**
 - Modify: `README.md`
-- Modify: `docs/sentry.md`
 - Test: README doctests via `cargo test --doc`
 
 **Interfaces:**
@@ -78,11 +77,7 @@ Record the baseline result. If an example is stale, add or correct the example t
 
 Explain that the git dependency is the pre-publication path and show the staged post-publication form `kinetic-signals = "0.4"` separately. Link to crates.io/docs.rs only as destinations to verify after publication, and add the changelog/release checklist link. Keep the existing API names and feature flags accurate.
 
-- [ ] **Step 3: Update Sentry examples to match the staged dependency**
-
-Retain git dependencies as the current pre-publication examples and retain the commented post-publication `version = "0.4"` form. Ensure every command and feature example matches the actual `sentry` feature and `init_sentry` API.
-
-- [ ] **Step 4: Run the documentation tests**
+- [ ] **Step 3: Run the documentation tests**
 
 Run:
 
@@ -95,14 +90,14 @@ Expected: all README and crate rustdoc examples pass with no warnings or failure
 - [ ] **Step 5: Commit**
 
 ```bash
-git add README.md docs/sentry.md
+git add README.md
 git commit -m "docs: align v0.4.0 installation and release guidance"
 ```
 
 ### Task 3: Validate the complete release-documentation deliverable
 
 **Files:**
-- Verify: `CHANGELOG.md`, `README.md`, `docs/sentry.md`, `Cargo.toml`
+- Verify: `CHANGELOG.md`, `README.md`, `Cargo.toml`
 
 **Interfaces:**
 - Verifies that the changelog is package-visible, README examples compile, and the release policy is reproducible against the exact v0.4.0 manifest.

@@ -22,7 +22,6 @@ First planned public crates.io release of the reusable, domain-agnostic streamin
 - Rolling RMS volatility through `VolEstimator`.
 - Shannon entropy, EMA, SMA, Z-score, skewness, and kurtosis signal features.
 - Shared JSON test vectors for Rust and SpikeStream.jl output-range parity.
-- Optional feature-gated Sentry initialization and release tracking.
 - Public rustdoc, runnable API demo coverage, and a boundary matrix describing ownership and cross-repository handoff points.
 
 ### Changed
@@ -35,7 +34,7 @@ First planned public crates.io release of the reusable, domain-agnostic streamin
 
 - Added Rust 1.85 MSRV validation for the Rust 2024 edition.
 - Added no-default-features, formatting, clippy, unit/integration, coverage, Docker, cargo-audit, and Qodana CI gates.
-- Kept the default build free of required runtime dependencies; Sentry remains optional.
+- Kept the crate free of runtime dependencies; observability belongs to consuming applications.
 
 ## Release checklist
 
@@ -59,7 +58,7 @@ After approval and upload:
 3. Create and push the exact `v0.4.0` tag.
 4. Create the GitHub Release from this `0.4.0` entry, without diverging release notes.
 5. Change README installation guidance to `kinetic-signals = "0.4"` only after the registry version is live.
-6. Confirm the tag-triggered Sentry release workflow reports `kinetic-signals@0.4.0`.
+6. Confirm consuming applications own any observability release integration.
 
 Do not use `--allow-dirty`, `--no-verify`, or committed registry/Sentry credentials to bypass a failed gate.
 
