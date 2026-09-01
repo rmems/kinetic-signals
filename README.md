@@ -20,12 +20,25 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 
 ## Installation
 
-Add to your `Cargo.toml`:
+Before the first crates.io publication, use the repository dependency:
 
 ```toml
 [dependencies]
 kinetic-signals = { git = "https://github.com/rmems/kinetic-signals" }
 ```
+
+After `kinetic-signals 0.4.0` is published and verified on
+[crates.io](https://crates.io/crates/kinetic-signals), use the registry
+dependency:
+
+```toml
+[dependencies]
+kinetic-signals = "0.4"
+```
+
+See the [changelog](CHANGELOG.md#release-checklist) for the release history
+and reproducible publication gates. The crates.io and docs.rs destinations are
+prepared in advance and remain unverified until publication completes.
 
 ## Usage
 
@@ -71,6 +84,10 @@ cargo run --example demo
 ### Development
 
 **MSRV:** Rust >= 1.85 (edition 2024)
+
+The complete release validation sequence is in the
+[v0.4.0 changelog](CHANGELOG.md#release-checklist); `cargo publish --dry-run`
+validates the package without uploading it.
 
 ```bash
 # Build and test (--all-features requires network for sentry crate download)

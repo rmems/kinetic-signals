@@ -13,6 +13,13 @@ Add the feature flag in your `Cargo.toml`:
 kinetic-signals = { git = "https://github.com/rmems/kinetic-signals", features = ["sentry"] }
 ```
 
+After `kinetic-signals 0.4.0` is published and verified on crates.io, use:
+
+```toml
+[dependencies]
+kinetic-signals = { version = "0.4", features = ["sentry"] }
+```
+
 Or when building this crate directly:
 
 ```bash
@@ -77,12 +84,13 @@ local feature name of `"sentry"` alone:
 sentry = ["kinetic-signals/sentry"]
 
 [dependencies]
-# Prefer git until crates.io publish lands (#8 / LIM-193):
+# Use git until crates.io publish lands (#8 / LIM-193):
 kinetic-signals = {
   git = "https://github.com/rmems/kinetic-signals",
   features = ["sentry"],
 }
-# After publish: kinetic-signals = { version = "0.4", features = ["sentry"] }
+# After publication and verification:
+# kinetic-signals = { version = "0.4", features = ["sentry"] }
 ```
 
 ```rust
