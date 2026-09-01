@@ -182,11 +182,12 @@ for that stage:
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
 or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html);
-the Cargo feature names in `[features]`; and every
+the Cargo feature names in `[features]` (there are currently no crate feature
+flags), and every
 **existing** trait implementation on a public type (e.g. `Default` for
 `HawkesParams`, `Clone` for the result structs) — removing one breaks
-downstream code that relies on it, the same as removing a function. A
-a public item. The crate root and `pub mod` surfaces are kept in sync with
+downstream code that relies on it, the same as removing a function. The crate
+root and `pub mod` surfaces are kept in sync with
 the `prelude`.
 
 **Generic scalar types:** `compute_hurst`, `compute_surprise`,

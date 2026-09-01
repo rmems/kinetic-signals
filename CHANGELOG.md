@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Continue documenting changes here before preparing the next release.
 
-## [0.4.0] - 2026-08-24
+## [0.4.0] - Unreleased
 
 First planned public crates.io release of the reusable, domain-agnostic streaming signal feature library. This entry describes the repository state prepared for publication; crates.io and docs.rs availability must still be verified after the upload.
 
@@ -29,6 +29,13 @@ First planned public crates.io release of the reusable, domain-agnostic streamin
 - Replaced financial-domain GBM naming with the domain-neutral surprise API: `compute_surprise`, `compute_surprise_sequence`, `SurpriseParams`, `SurpriseResult`, and `surprise::detect_anomaly`.
 - Documented the pre-1.0 SemVer and public API stability policy.
 - Prepared registry metadata, dual `MIT OR Apache-2.0` licensing, README package metadata, and docs.rs configuration for the first publication.
+
+### Breaking changes
+
+- Removed the pre-publication `sentry` Cargo feature and `init_sentry()` API.
+  Consumers upgrading from a pre-release build that enabled `features =
+  ["sentry"]` must remove that feature and initialize observability in the
+  consuming application instead.
 
 ### Quality and release infrastructure
 

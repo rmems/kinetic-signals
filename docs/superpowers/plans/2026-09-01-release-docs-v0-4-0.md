@@ -57,21 +57,21 @@ git commit -m "docs: add v0.4.0 changelog and release policy"
 
 **Files:**
 - Modify: `README.md`
-- Test: README doctests via `cargo test --doc`
+- Test: `tests/readme_usage.rs`
 
 **Interfaces:**
 - Consumes the release policy from `CHANGELOG.md`.
 - Produces unambiguous pre-release and post-publication installation instructions and examples matching the exported Rust API.
 
-- [ ] **Step 1: Add a failing documentation verification check**
+- [ ] **Step 1: Add a README usage compile test**
 
-Run the existing doctest suite before the documentation edits:
+Add `tests/readme_usage.rs` containing the public API usage shown in README.md, then run:
 
 ```bash
 cargo test --doc
 ```
 
-Record the baseline result. If an example is stale, add or correct the example text so the relevant doctest demonstrates the intended API and fails before the correction.
+This integration test compiles the README usage against the actual crate API; `cargo test --doc` alone does not compile README code.
 
 - [ ] **Step 2: Update README installation and release guidance**
 
