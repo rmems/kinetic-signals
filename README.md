@@ -150,6 +150,11 @@ v0.4.0 removes the deprecated GBM aliases. Replace with the domain-agnostic name
 | `GBMResult`                      | `SurpriseResult`           |
 | `gbm::detect_anomaly`            | `surprise::detect_anomaly` |
 
+Also remove `features = ["sentry"]` from the dependency declaration and
+delete any calls to `init_sentry()`. Observability setup now belongs in the
+consuming application rather than in this crate; see the migration notes in
+[`CHANGELOG.md`](CHANGELOG.md#040---unreleased).
+
 ## Pre-1.0 SemVer / Stability Policy
 
 `kinetic-signals` is pre-1.0 (`0.x.y`) and follows the Cargo/SemVer convention
