@@ -42,9 +42,14 @@ Run:
 
 ```bash
 cargo package --list
+cargo package
+archive=$(find target/package -maxdepth 1 -name 'kinetic-signals-*.crate' -print -quit)
+tar -xOf "$archive" "kinetic-signals-*/CHANGELOG.md" | rg 'Unreleased|0.4.0'
+tar -xOf "$archive" "kinetic-signals-*/README.md" | rg 'kinetic-signals ='
+! tar -tf "$archive" | rg '(^|/)(AGENTS.md|CLAUDE.md|\.github/|docs/superpowers/)'
 ```
 
-Expected: `CHANGELOG.md` and `README.md` are included in the package, with no secret or unrelated files.
+Expected: the package contains release files and README targets, excludes agent/CI/planning files, and the extracted archive contains no credentials.
 
 - [ ] **Step 3: Commit**
 
@@ -68,7 +73,7 @@ git commit -m "docs: add v0.4.0 changelog and release policy"
 Add `tests/readme_usage.rs` containing the public API usage shown in README.md, then run:
 
 ```bash
-cargo test --doc
+cargo test --test readme_usage
 ```
 
 This integration test compiles the README usage against the actual crate API; `cargo test --doc` alone does not compile README code.
@@ -85,9 +90,9 @@ Run:
 cargo test --doc
 ```
 
-Expected: all README and crate rustdoc examples pass with no warnings or failures.
+Expected: the README usage integration test and crate rustdoc examples pass with no warnings or failures.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add README.md
@@ -102,7 +107,7 @@ git commit -m "docs: align v0.4.0 installation and release guidance"
 **Interfaces:**
 - Verifies that the changelog is package-visible, README examples compile, and the release policy is reproducible against the exact v0.4.0 manifest.
 
-- [ ] **Step 1: Run formatting and default tests**
+- [ ] **Step 3: Run formatting and default tests**
 
 ```bash
 cargo fmt --check
@@ -111,7 +116,7 @@ cargo test
 
 Expected: both commands pass.
 
-- [ ] **Step 2: Run the publishability checks**
+- [ ] **Step 4: Run the publishability checks**
 
 ```bash
 cargo package --list
@@ -120,15 +125,15 @@ cargo publish --dry-run
 
 Expected: package listing and dry-run pass without uploading anything.
 
-- [ ] **Step 3: Inspect the final diff**
+- [ ] **Step 5: Inspect the final diff**
 
 ```bash
-git diff --check HEAD~2..HEAD
+git diff --check origin/main..HEAD
 git status --short
 ```
 
-Expected: only the intended documentation files changed, with no generated artifacts or credentials.
+Expected: the known release files changed, with no generated artifacts or credentials.
 
-- [ ] **Step 4: Prepare handoff**
+- [ ] **Step 6: Prepare handoff**
 
 Report the commits, validation results, remaining post-publication gates, and that GitHub Release #47 can derive its notes directly from `CHANGELOG.md`.

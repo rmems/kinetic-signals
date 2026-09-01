@@ -35,9 +35,9 @@ CI commands must not use `--locked`, it fails on a fresh checkout with no lockfi
   never part of the public API even though it constrains public generic functions. The
   compile-time `Send + Sync` assertions in `src/lib.rs` (`_assert_send_sync`) only cover
   the concrete `f32`/`f64` instantiations, not an arbitrary caller-supplied generic `T`.
-- **Three public API surfaces, one deliberate gap**: crate root (`kinetic_signals::*`),
+- **Three public API surfaces**: crate root (`kinetic_signals::*`),
   each `pub mod`, and `prelude` (glob re-export of the seven computation modules) are kept
-  are kept in sync. Adding a new module item is usually non-breaking pre-1.0; adding
+  in sync. Adding a new module item is usually non-breaking pre-1.0; adding
   a new trait impl or inherent method is not automatically safe (glob re-exports can create
   downstream ambiguity or ordinary API conflicts) — see the "Pre-1.0 SemVer / Stability
   Policy" section of `README.md` before changing what's exported where.

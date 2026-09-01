@@ -110,13 +110,13 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 cargo llvm-cov --all-features --workspace --open
 ```
 
-Coverage reports are automatically generated and uploaded to [Codecov](https://codecov.io/gh/rmems/kinetic-signals) in CI via the [coverage workflow](.github/workflows/coverage.yml) on every push to `main` and in pull requests. Results are also available via the badge at the top of this README.
+Coverage reports are automatically generated and uploaded to [Codecov](https://codecov.io/gh/rmems/kinetic-signals) in CI via the [coverage workflow](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/coverage.yml) on every push to `main` and in pull requests. Results are also available via the badge at the top of this README.
 
 **CI workflows:**
 
-- [Build & Test](.github/workflows/ci.yml) — fmt, clippy, build, test
-- [Coverage](.github/workflows/coverage.yml) — cargo-llvm-cov + Codecov upload
-- [Docker](.github/workflows/docker.yml) — containerized build + test
+- [Build & Test](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/ci.yml) — fmt, clippy, build, test
+- [Coverage](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/coverage.yml) — cargo-llvm-cov + Codecov upload
+- [Docker](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/docker.yml) — containerized build + test
 
 **Docker** (reproducible build):
 

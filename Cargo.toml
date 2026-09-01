@@ -13,7 +13,7 @@ readme = "README.md"
 keywords = ["signals", "time-series", "stochastic", "hawkes", "surprise"]
 categories = ["algorithms", "science"]
 publish = ["crates-io"]
-include = ["Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE-APACHE-2.0", "LICENSE-MIT", "src/**", "examples/**", "tests/**", "docs/boundary-matrix.md"]
+include = ["Cargo.toml", "CHANGELOG.md", "README.md", "REVIEW.md", "LICENSE-APACHE-2.0", "LICENSE-MIT", "src/**", "examples/**", "tests/**", "docs/boundary-matrix.md"]
 
 [dependencies]
 

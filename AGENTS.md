@@ -23,8 +23,6 @@ Part of the [rmems](https://github.com/rmems) ecosystem. See [`docs/boundary-mat
 
 | Dependency | Type | Purpose |
 |------------|------|---------|
-| `serial_test` 3.0 | dev | Serial test execution for env var tests |
-| `temp-env` 0.3.6 | dev | Safe environment variable manipulation |
 | `serde_json` 1 | dev | Deserialize shared golden fixtures in tests |
 
 ## Toolchain
@@ -70,7 +68,7 @@ cargo run --example demo
 - **Linting:** `cargo clippy --all-targets --all-features -- -D warnings`
 - **Comments:** No comments unless the reason is non-obvious. Never explain what the code does.
 - **Headers:** All source files include a license identifier header (see the license files in the repo root)
-- **Unsafe:** Avoid. Edition 2024 marks `env::set_var`/`env::remove_var` as unsafe — use `temp-env` crate in tests.
+- **Unsafe:** Avoid. Do not use environment mutation in library code.
 
 ## Testing
 

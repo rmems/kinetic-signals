@@ -37,8 +37,6 @@ Domain-agnostic streaming feature extraction for stochastic signals. Computes re
 
 | Dependency | Reason |
 |------------|--------|
-| `temp-env` (dev) | Safe env var testing |
-| `serial_test` (dev) | Serial test execution (prevents race conditions in env var tests) |
 
 ### Forbidden (by design)
 
