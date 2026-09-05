@@ -9,7 +9,7 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 
 ## Features
 
-- **Zero required dependencies** - No external crates by default; optional `sentry` feature available
+- **Zero runtime dependencies** - The crate is self-contained; consuming applications own observability integrations
 - **Hurst Exponent** - Detects long-term memory and persistence in time-series data
 - **Hawkes Process** - Models self-exciting event clusters in point-process streams
 - **Surprise** - Detects anomalous transition magnitudes via normalized log-ratio z-scores
@@ -20,12 +20,25 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 
 ## Installation
 
-Add to your `Cargo.toml`:
+Before the first crates.io publication, use the repository dependency:
 
 ```toml
 [dependencies]
 kinetic-signals = { git = "https://github.com/rmems/kinetic-signals" }
 ```
+
+After `kinetic-signals 0.4.0` is published and verified on
+[crates.io](https://crates.io/crates/kinetic-signals), use the registry
+dependency:
+
+```toml
+[dependencies]
+kinetic-signals = "0.4"
+```
+
+See the [changelog](CHANGELOG.md#release-checklist) for the release history
+and reproducible publication gates. The crates.io and docs.rs destinations are
+prepared in advance and remain unverified until publication completes.
 
 ## Usage
 
@@ -72,8 +85,12 @@ cargo run --example demo
 
 **MSRV:** Rust >= 1.85 (edition 2024)
 
+The complete release validation sequence is in the
+[v0.4.0 changelog](CHANGELOG.md#release-checklist); `cargo publish --dry-run`
+validates the package without uploading it.
+
 ```bash
-# Build and test (--all-features requires network for sentry crate download)
+# Build and test
 cargo build
 cargo test --all-features
 
@@ -81,8 +98,6 @@ cargo test --all-features
 cargo clippy --all-targets --all-features
 cargo fmt
 
-# Run with sentry error reporting
-SENTRY_DSN=https://...@... cargo run --example demo --features sentry
 ```
 
 **Test coverage** (requires `cargo-llvm-cov`):
@@ -95,14 +110,13 @@ cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
 cargo llvm-cov --all-features --workspace --open
 ```
 
-Coverage reports are automatically generated and uploaded to [Codecov](https://codecov.io/gh/rmems/kinetic-signals) in CI via the [coverage workflow](.github/workflows/coverage.yml) on every push to `main` and in pull requests. Results are also available via the badge at the top of this README.
+Coverage reports are automatically generated and uploaded to [Codecov](https://codecov.io/gh/rmems/kinetic-signals) in CI via the [coverage workflow](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/coverage.yml) on every push to `main` and in pull requests. Results are also available via the badge at the top of this README.
 
 **CI workflows:**
 
-- [Build & Test](.github/workflows/ci.yml) — fmt, clippy, build, test
-- [Coverage](.github/workflows/coverage.yml) — cargo-llvm-cov + Codecov upload
-- [Docker](.github/workflows/docker.yml) — containerized build + test
-- [Sentry Release](.github/workflows/sentry-release.yml) — creates Sentry release on tag push
+- [Build & Test](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/ci.yml) — fmt, clippy, build, test
+- [Coverage](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/coverage.yml) — cargo-llvm-cov + Codecov upload
+- [Docker](https://github.com/rmems/kinetic-signals/blob/main/.github/workflows/docker.yml) — containerized build + test
 
 **Docker** (reproducible build):
 
@@ -136,6 +150,11 @@ v0.4.0 removes the deprecated GBM aliases. Replace with the domain-agnostic name
 | `GBMResult`                      | `SurpriseResult`           |
 | `gbm::detect_anomaly`            | `surprise::detect_anomaly` |
 
+Also remove `features = ["sentry"]` from the dependency declaration and
+delete any calls to `init_sentry()`. Observability setup now belongs in the
+consuming application rather than in this crate; see the migration notes in
+[`CHANGELOG.md`](CHANGELOG.md#040---unreleased).
+
 ## Pre-1.0 SemVer / Stability Policy
 
 `kinetic-signals` is pre-1.0 (`0.x.y`) and follows the Cargo/SemVer convention
@@ -168,19 +187,13 @@ for that stage:
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
 or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html);
-the Cargo feature names in `[features]` (currently `sentry`); and every
+the Cargo feature names in `[features]` (there are currently no crate feature
+flags), and every
 **existing** trait implementation on a public type (e.g. `Default` for
 `HawkesParams`, `Clone` for the result structs) — removing one breaks
-downstream code that relies on it, the same as removing a function. A
-downstream `Cargo.toml` can depend on a feature name directly (e.g.
-`features = ["sentry"]`); removing or renaming one breaks that manifest even
-if every Rust item it gates stays available under a replacement feature, so
-feature removal/renaming follows the same breaking-change rules as removing
-a public item. The crate root and `pub mod` surfaces are kept in sync with
-the `prelude`, with one deliberate exception: `init_sentry` (crate-root,
-`sentry`-feature-gated setup/observability plumbing) is intentionally not
-re-exported from the prelude — see `src/lib.rs`'s `pub use` block and the
-`prelude` module's own doc comment.
+downstream code that relies on it, the same as removing a function. The crate
+root and `pub mod` surfaces are kept in sync with
+the `prelude`.
 
 **Generic scalar types:** `compute_hurst`, `compute_surprise`,
 `compute_surprise_sequence`, and `detect_anomaly` are generic over a sealed,
@@ -256,33 +269,11 @@ Licensed under either of
 
 at your option.
 
-## Observability (optional Sentry)
+## Observability
 
-Opt-in error monitoring via the optional `sentry` feature. Full guide: [`docs/sentry.md`](docs/sentry.md).
-
-**Setup** — enable the feature and set a DSN:
-
-```toml
-[dependencies]
-kinetic-signals = { git = "https://github.com/rmems/kinetic-signals", features = ["sentry"] }
-```
-
-```bash
-export SENTRY_DSN=https://...@...
-```
-
-**Usage** — call `init_sentry()` once and keep the guard for the process lifetime (flush on drop, up to 2s):
-
-```rust
-// Requires kinetic-signals built with `features = ["sentry"]` (see docs/sentry.md).
-let _guard = kinetic_signals::init_sentry();
-```
-
-- Returns `Some(ClientInitGuard)` when `SENTRY_DSN` is set and non-empty; `None` otherwise.
-- Release is set via `sentry::release_name!()` → `CARGO_PKG_NAME@CARGO_PKG_VERSION` (e.g. `kinetic-signals@0.4.0`).
-- Tag pushes `v*` create matching Sentry releases (`kinetic-signals@X.Y.Z`) via [sentry-release.yml](.github/workflows/sentry-release.yml).
-
-Sentry is **never** initialized unless the feature is enabled and the DSN is present. No data is sent by default.
+Observability integrations are intentionally owned by consuming applications.
+`kinetic-signals` performs signal feature extraction and does not initialize
+telemetry clients or send network events.
 
 ## Authors
 

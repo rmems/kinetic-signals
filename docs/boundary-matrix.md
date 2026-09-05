@@ -37,9 +37,6 @@ Domain-agnostic streaming feature extraction for stochastic signals. Computes re
 
 | Dependency | Reason |
 |------------|--------|
-| `sentry` (optional) | Error monitoring, feature-gated |
-| `temp-env` (dev) | Safe env var testing |
-| `serial_test` (dev) | Serial test execution (prevents race conditions in env var tests) |
 
 ### Forbidden (by design)
 
@@ -71,7 +68,7 @@ All public types are `Send + Sync`. `VolEstimator` requires `&mut self` for muta
 
 ## Sequencing
 
-1. PR #12 (dual-license + sentry) — merged
+1. PR #12 (dual-license) — merged
 2. PR #16 (README dev section) — open
 3. PR #17 (remove deprecated aliases) — open
 4. This document (PR #19) — open
