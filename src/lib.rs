@@ -16,6 +16,8 @@
 //! - **Volatility** - Real-time variance and standard deviation tracking
 //! - **Shannon Entropy** - Measures signal complexity and information density
 //! - **Indicators** - Moving averages (EMA, SMA) and Z-score tracking
+//! - **Buffer reuse** - [`compute_surprise_sequence_into`] and
+//!   [`compute_shannon_entropy_into`] write into caller-owned `Vec`s
 //!
 //! ## Performance (Ryzen 9 9950X)
 //!
@@ -26,13 +28,19 @@
 //! ## Example
 //!
 //! ```rust
-//! use kinetic_signals::{compute_hurst, compute_surprise, SurpriseParams};
+//! use kinetic_signals::{
+//!     SurpriseParams, compute_hurst, compute_surprise, compute_surprise_sequence_into,
+//! };
 //!
 //! let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
 //! let h_result = compute_hurst(&data);
 //!
 //! let params = SurpriseParams::default();
 //! let surprise = compute_surprise(150.0, 100.0, &params);
+//!
+//! let mut buf = Vec::new();
+//! compute_surprise_sequence_into(&[100.0, 101.0, 102.0], &params, &mut buf);
+//! assert_eq!(buf.len(), 2);
 //! ```
 //!
 pub mod entropy;
@@ -44,13 +52,14 @@ pub mod stats;
 pub mod surprise;
 pub mod volatility;
 
-pub use entropy::{EntropyResult, compute_shannon_entropy};
+pub use entropy::{EntropyResult, compute_shannon_entropy, compute_shannon_entropy_into};
 pub use hawkes::{HawkesParams, HawkesResult, compute_hawkes, compute_hawkes_streaming};
 pub use hurst::{HurstResult, compute_hurst};
 pub use indicators::{EMA, SMA, ZScore};
 pub use stats::{SignalStats, compute_signal_stats};
 pub use surprise::{
-    SurpriseParams, SurpriseResult, compute_surprise, compute_surprise_sequence, detect_anomaly,
+    SurpriseParams, SurpriseResult, compute_surprise, compute_surprise_sequence,
+    compute_surprise_sequence_into, detect_anomaly, surprise_sequence_len,
 };
 pub use volatility::VolEstimator;
 
