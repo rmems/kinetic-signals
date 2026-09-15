@@ -208,10 +208,10 @@ fn from_snapshot_rejects_zero_capacity() {
         capacity: 0,
         samples: vec![],
     };
-    assert_eq!(
+    assert!(matches!(
         VolEstimator::from_snapshot(&vol),
         Err(SnapshotError::InvalidCapacity)
-    );
+    ));
 
     let sma = SMASnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
@@ -219,10 +219,10 @@ fn from_snapshot_rejects_zero_capacity() {
         window: vec![],
         sum: 0.0,
     };
-    assert_eq!(
+    assert!(matches!(
         SMA::from_snapshot(&sma),
         Err(SnapshotError::InvalidCapacity)
-    );
+    ));
 }
 
 #[cfg(feature = "serde")]
