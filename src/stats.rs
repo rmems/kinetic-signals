@@ -7,7 +7,7 @@
 //! the slice). Suitable for batch feature extraction; for streaming variance
 //! prefer [`crate::VolEstimator`].
 
-use crate::numeric::all_finite;
+use crate::numeric::{all_finite, welford_mean};
 
 /// Central moments and shape descriptors of a signal sample.
 #[derive(Debug, Clone)]
@@ -34,20 +34,14 @@ fn empty_stats() -> SignalStats {
     }
 }
 
-fn welford_mean(data: &[f64]) -> f64 {
-    let mut mean = 0.0;
-    for (i, &x) in data.iter().enumerate() {
-        mean += (x - mean) / (i + 1) as f64;
-    }
-    mean
-}
-
 /// Compute high-order moments for a signal using a single-pass algorithm
 /// (after the mean is computed).
 ///
 /// Returns an all-zero result for an empty slice. Any non-finite sample
 /// yields the same empty sentinel (`count = 0`) so a poisoned window cannot
-/// emit `NaN` moments. Constant and near-constant series return `0` skewness
+/// emit `NaN` moments. Overflow of second-or-higher moments (extreme
+/// opposite-signed magnitudes) also yields the empty sentinel. Constant and
+/// near-constant series return `0` skewness
 /// and kurtosis instead of dividing by a vanishing standard deviation.
 /// The mean is accumulated with Welford's method so extreme finite magnitudes
 /// do not overflow the first-pass sum.
@@ -84,6 +78,9 @@ pub fn compute_signal_stats(data: &[f64]) -> SignalStats {
     }
 
     let var = m2 / n_f;
+    if !mean.is_finite() || !var.is_finite() {
+        return empty_stats();
+    }
     let std = var.sqrt();
     let skew = if std > 1e-12 && std.is_finite() && m3.is_finite() {
         (m3 / n_f) / (std * var)
@@ -181,5 +178,13 @@ mod tests {
         assert!(stats.variance.is_finite() && stats.variance > 0.0);
         assert!(stats.skewness.is_finite());
         assert!(stats.kurtosis.is_finite());
+    }
+
+    #[test]
+    fn test_signal_stats_overflow_spread_is_empty() {
+        let stats = compute_signal_stats(&[1e200, -1e200]);
+        assert_eq!(stats.count, 0);
+        assert_eq!(stats.mean, 0.0);
+        assert_eq!(stats.variance, 0.0);
     }
 }

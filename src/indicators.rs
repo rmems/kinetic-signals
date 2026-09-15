@@ -9,6 +9,8 @@
 //! - [`SMA`] — fixed-window simple moving average
 //! - [`ZScore`] — z-score (standard-score) normalization helper
 
+use crate::numeric::{finite_or_zero, welford_mean};
+
 /// Exponential moving average (EMA) for streaming data.
 ///
 /// Smoothing factor \(\alpha = 2 / (\text{period} + 1)\). The first
@@ -82,12 +84,13 @@ pub struct ZScore {
 
 impl ZScore {
     /// Return \((value - mean) / std_dev\), or `0.0` if `std_dev` is near
-    /// zero, non-positive, or any argument is non-finite.
+    /// zero, non-positive, any argument is non-finite, or the quotient
+    /// overflows.
     pub fn compute(value: f64, mean: f64, std_dev: f64) -> f64 {
         if !value.is_finite() || !mean.is_finite() || !std_dev.is_finite() || std_dev <= 1e-12 {
             0.0
         } else {
-            (value - mean) / std_dev
+            finite_or_zero((value - mean) / std_dev)
         }
     }
 }
@@ -144,15 +147,22 @@ impl SMA {
             return if self.window.is_empty() {
                 0.0
             } else {
-                self.sum / self.window.len() as f64
+                finite_or_zero(welford_mean(&self.window))
             };
         }
         if self.window.len() == self.capacity {
             self.window.remove(0);
         }
         self.window.push(new_value);
-        self.sum = self.window.iter().copied().sum();
-        self.sum / self.window.len() as f64
+        let mean = welford_mean(&self.window);
+        if !mean.is_finite() {
+            self.sum = 0.0;
+            return 0.0;
+        }
+        let n = self.window.len() as f64;
+        let sum = mean * n;
+        self.sum = finite_or_zero(sum);
+        mean
     }
 }
 
@@ -220,6 +230,7 @@ mod tests {
         assert_eq!(ZScore::compute(f64::NAN, 0.0, 1.0), 0.0);
         assert_eq!(ZScore::compute(1.0, f64::INFINITY, 1.0), 0.0);
         assert_eq!(ZScore::compute(1.0, 0.0, f64::NAN), 0.0);
+        assert_eq!(ZScore::compute(f64::MAX, f64::MIN, 1.0), 0.0);
     }
 
     #[test]
@@ -258,5 +269,14 @@ mod tests {
         let mean = sma.update(1e12 + 2.0);
         assert!(mean.is_finite());
         assert!((mean - (1e12 + 1.0)).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_sma_opposite_extremes_mean_is_finite() {
+        let mut sma = SMA::new(2);
+        sma.update(f64::MAX);
+        let mean = sma.update(f64::MAX);
+        assert!(mean.is_finite());
+        assert_eq!(mean, f64::MAX);
     }
 }

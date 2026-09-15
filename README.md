@@ -136,21 +136,21 @@ Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf
 | API | Invalid / ill-conditioned input | Chosen behavior |
 |-----|---------------------------------|-----------------|
 | `compute_hurst` | `len < 32`, any non-finite sample, constant / near-constant windows, underdetermined log-log fit | `h = 0.5`, both persistence flags `false` |
-| `compute_hawkes` | empty history, any non-finite time or parameter, `beta < 0` | `event_count = 0`, `intensity = μ` (or `0` if `μ` is non-finite), `avg_excitation = 0` |
+| `compute_hawkes` | empty history, any non-finite time or parameter, `mu < 0` / `alpha < 0` / `beta < 0`, overflowed excitation sum | `event_count = 0`, `intensity = μ` (or `0` if `μ` is non-finite), `avg_excitation = 0` |
 | `compute_hawkes` | negative inter-event gap (non-monotonic times) | gap clamped to `0` so `exp(+large)` cannot overflow |
 | `compute_hawkes_streaming` | non-finite time, `decay_sum`, or parameters | `(μ, decay_sum)` with non-finite fields replaced by `0`; negative `dt` / `decay_sum` clamped to `0` |
 | `compute_hawkes` + streaming | same finite monotone history, stream started at decay `0` | post-event `μ + α · decay_sum` matches batch intensity (pre-jump streaming return is `μ + α · decayed_sum`) |
 | `compute_surprise` / `compute_surprise_sequence` | non-finite or non-positive sample, non-finite params, `dt < 0` | zeroed result (`surprise = z_score = log_return = 0`); sequence length still `values.len() - 1` |
 | `compute_surprise` | `sigma ≤ 0` with valid positive samples | `z_score = surprise = 0`; `log_return` still reported |
 | `detect_anomaly` | non-finite surprise or threshold | `false` (not an anomaly) |
-| `compute_shannon_entropy` | `len < 2`, `bins == 0`, any non-finite sample | zeroed result (`bin_count = 0`) |
+| `compute_shannon_entropy` | `len < 2`, `bins == 0`, any non-finite sample, overflowed `max - min` range | zeroed result (`bin_count = 0`) |
 | `compute_shannon_entropy` | constant series (`max == min`) | `shannon = 0`, `bin_count = 1` |
-| `compute_signal_stats` | empty slice or any non-finite sample | all zeros, `count = 0` |
+| `compute_signal_stats` | empty slice, any non-finite sample, or overflowing second moment | all zeros, `count = 0` |
 | `compute_signal_stats` | constant / near-zero variance | `skewness = kurtosis = 0` |
 | `VolEstimator::push` / `rms` | non-finite push; empty window | push ignored; empty `rms = 0`; output clamped to `[0, 1]` |
 | `EMA::update` / `SMA::update` | non-finite sample | state unchanged; current value returned (`0` if uninitialized / empty) |
 | `SMA::new` / `VolEstimator::new` | `capacity == 0` | panic (`capacity must be > 0`) |
-| `ZScore::compute` | non-finite argument or `std_dev ≤ 1e-12` | `0.0` |
+| `ZScore::compute` | non-finite argument, `std_dev ≤ 1e-12`, or overflowing quotient | `0.0` |
 
 Shared-vector goldens are unchanged: the sentinels apply only to invalid or degenerate inputs, not to the finite fixture histories.
 

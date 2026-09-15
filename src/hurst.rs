@@ -67,8 +67,12 @@ fn chunk_rs<T: Real>(chunk: &[T]) -> Option<T> {
         sq_diff_sum = sq_diff_sum + diff * diff;
     }
     let std_dev = (sq_diff_sum / T::from_usize(tau)).sqrt();
-    if std_dev > c(1e-12) {
-        Some((max_dev - min_dev) / std_dev)
+    if !std_dev.is_finite() || std_dev <= c(1e-12) {
+        return None;
+    }
+    let rs = (max_dev - min_dev) / std_dev;
+    if rs.is_finite() && rs > T::zero() {
+        Some(rs)
     } else {
         None
     }
@@ -88,8 +92,17 @@ fn log_rs_point<T: Real>(data: &[T], tau: usize) -> Option<(T, T)> {
         return None;
     }
     let rs_avg = rs_sums / T::from_usize(count);
+    if !rs_sums.is_finite() || !rs_avg.is_finite() {
+        return None;
+    }
     if rs_avg > T::zero() {
-        Some((T::from_usize(tau).ln(), rs_avg.ln()))
+        let ln_tau = T::from_usize(tau).ln();
+        let ln_rs = rs_avg.ln();
+        if ln_tau.is_finite() && ln_rs.is_finite() {
+            Some((ln_tau, ln_rs))
+        } else {
+            None
+        }
     } else {
         None
     }
@@ -128,7 +141,8 @@ fn slope_from_loglog<T: Real>(log_n: &[T], log_rs: &[T]) -> T {
     if den.abs() < c(1e-12) {
         c(0.5)
     } else {
-        num / den
+        let h = num / den;
+        if h.is_finite() { h } else { c(0.5) }
     }
 }
 
@@ -230,5 +244,15 @@ mod tests {
         let result = compute_hurst(&data);
         assert!(result.h.is_finite());
         assert!((0.0..=1.0).contains(&result.h));
+    }
+
+    #[test]
+    fn test_hurst_opposite_extremes_is_half() {
+        let data: Vec<f64> = (0..64)
+            .map(|i| if i % 2 == 0 { 1e200 } else { -1e200 })
+            .collect();
+        let result = compute_hurst(&data);
+        assert_eq!(result.h, 0.5);
+        assert!(!result.is_persistent && !result.is_antipersistent);
     }
 }

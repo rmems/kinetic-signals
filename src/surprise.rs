@@ -64,11 +64,8 @@ fn params_finite<T: Real>(params: &SurpriseParams<T>) -> bool {
 }
 
 fn expected_return<T: Real>(params: &SurpriseParams<T>) -> T {
-    if params.mu.is_finite() && params.dt.is_finite() {
-        params.mu * params.dt
-    } else {
-        T::zero()
-    }
+    let er = params.mu * params.dt;
+    if er.is_finite() { er } else { T::zero() }
 }
 
 fn zeroed<T: Real>(params: &SurpriseParams<T>) -> SurpriseResult<T> {
@@ -118,10 +115,10 @@ where
     }
 
     let log_return = (current_value / previous_value).ln();
-    let expected_return = params.mu * params.dt;
+    let expected = expected_return(params);
     let std_dev = params.sigma * params.dt.sqrt();
     let z_score = if std_dev > T::zero() && std_dev.is_finite() && log_return.is_finite() {
-        (log_return - expected_return) / std_dev
+        (log_return - expected) / std_dev
     } else {
         T::zero()
     };
@@ -138,7 +135,7 @@ where
         } else {
             T::zero()
         },
-        expected_return,
+        expected_return: expected,
         z_score,
     }
 }
@@ -352,5 +349,20 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].surprise, 0.0);
         assert_eq!(results[1].surprise, 0.0);
+    }
+
+    #[test]
+    fn test_surprise_overflow_mu_dt_expected_is_zero() {
+        let params = SurpriseParams {
+            mu: 1e300,
+            dt: 1e20,
+            ..SurpriseParams::default()
+        };
+        let r = compute_surprise(f64::NAN, 1.0, &params);
+        assert_eq!(r.expected_return, 0.0);
+        assert!(r.surprise.is_finite() && r.z_score.is_finite());
+        let ok = compute_surprise(1.1, 1.0, &params);
+        assert_eq!(ok.expected_return, 0.0);
+        assert!(ok.surprise.is_finite());
     }
 }

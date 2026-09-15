@@ -9,3 +9,11 @@ pub(crate) fn all_finite<T: Real>(values: &[T]) -> bool {
 pub(crate) fn finite_or_zero(x: f64) -> f64 {
     if x.is_finite() { x } else { 0.0 }
 }
+
+pub(crate) fn welford_mean(data: &[f64]) -> f64 {
+    let mut mean = 0.0;
+    for (i, &x) in data.iter().enumerate() {
+        mean += (x - mean) / (i + 1) as f64;
+    }
+    mean
+}

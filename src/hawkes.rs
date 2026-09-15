@@ -68,6 +68,8 @@ fn params_usable(params: &HawkesParams) -> bool {
         && params.alpha.is_finite()
         && params.beta.is_finite()
         && params.dt.is_finite()
+        && params.mu >= 0.0
+        && params.alpha >= 0.0
         && params.beta >= 0.0
 }
 
@@ -82,10 +84,11 @@ fn empty_result(params: &HawkesParams) -> HawkesResult {
 /// Estimate Hawkes intensity at the last event from a full event-time history.
 ///
 /// Returns baseline intensity alone when `event_times` is empty. Non-finite
-/// event times or parameters, or `beta < 0`, yield the same empty-history
-/// sentinel (`event_count = 0`, `intensity = μ` when `μ` is finite, else `0`).
-/// Negative inter-event gaps are clamped to zero so a non-monotonic history
-/// cannot explode via `exp(+large)`.
+/// event times or parameters, or `mu < 0` / `alpha < 0` / `beta < 0`, yield
+/// the same empty-history sentinel (`event_count = 0`, `intensity = μ` when
+/// `μ` is finite, else `0`). Overflow of the excitation sum also yields that
+/// sentinel. Negative inter-event gaps are clamped to zero so a non-monotonic
+/// history cannot explode via `exp(+large)`.
 ///
 /// # Example
 ///
@@ -111,10 +114,15 @@ pub fn compute_hawkes(event_times: &[f64], params: &HawkesParams) -> HawkesResul
     }
 
     let n = event_times.len() as f64;
+    let intensity = params.mu + excitation_sum;
+    let avg_excitation = excitation_sum / n;
+    if !intensity.is_finite() || !avg_excitation.is_finite() {
+        return empty_result(params);
+    }
     HawkesResult {
-        intensity: params.mu + excitation_sum,
+        intensity,
         event_count: event_times.len(),
-        avg_excitation: excitation_sum / n,
+        avg_excitation,
     }
 }
 
@@ -180,6 +188,9 @@ pub fn compute_hawkes_streaming(
     let decayed_sum = decay_sum.max(0.0) * (-params.beta * dt).exp();
     let new_intensity = params.mu + params.alpha * decayed_sum;
     let new_decay_sum = decayed_sum + 1.0;
+    if !new_intensity.is_finite() || !new_decay_sum.is_finite() {
+        return (params.mu, 0.0);
+    }
     (new_intensity, new_decay_sum)
 }
 
@@ -292,6 +303,20 @@ mod tests {
         let exploded = compute_hawkes(&[0.0, 1.0], &neg_beta);
         assert_eq!(exploded.event_count, 0);
         assert_eq!(exploded.intensity, neg_beta.mu);
+
+        let neg_alpha = HawkesParams {
+            alpha: -0.5,
+            ..HawkesParams::default()
+        };
+        assert_eq!(compute_hawkes(&[0.0, 0.1], &neg_alpha).event_count, 0);
+
+        let huge = HawkesParams {
+            alpha: f64::MAX,
+            ..HawkesParams::default()
+        };
+        let overflowed = compute_hawkes(&[0.0, 0.0], &huge);
+        assert_eq!(overflowed.event_count, 0);
+        assert!(overflowed.intensity.is_finite());
     }
 
     #[test]

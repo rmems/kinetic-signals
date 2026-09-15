@@ -34,8 +34,11 @@ fn zero_entropy() -> EntropyResult {
 /// Compute Shannon entropy of a signal using histogram discretization.
 ///
 /// Returns a zeroed result when `data` has fewer than two samples, `bins`
-/// is zero, or any sample is non-finite. A constant (including near-constant
-/// with `max == min`) series yields zero entropy with `bin_count == 1`.
+/// is zero, or any sample is non-finite. A range that overflows `f64`
+/// (finite values near opposite extremes) is treated the same way: equal-width
+/// bins are undefined, so the empty sentinel is returned (`bin_count == 0`).
+/// A constant (including near-constant with `max == min`) series yields zero
+/// entropy with `bin_count == 1`.
 ///
 /// # Example
 ///
@@ -142,5 +145,13 @@ mod tests {
     fn test_entropy_short_and_zero_bins() {
         assert_eq!(compute_shannon_entropy(&[1.0], 4).bin_count, 0);
         assert_eq!(compute_shannon_entropy(&[1.0, 2.0], 0).bin_count, 0);
+    }
+
+    #[test]
+    fn test_entropy_overflow_range_is_empty() {
+        let res = compute_shannon_entropy(&[f64::MAX, f64::MIN], 4);
+        assert_eq!(res.bin_count, 0);
+        assert_eq!(res.shannon, 0.0);
+        assert_eq!(res.relative, 0.0);
     }
 }

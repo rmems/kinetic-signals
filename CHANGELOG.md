@@ -10,7 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Public numerical APIs now treat non-finite inputs (`NaN`, `±Inf`) and ill-conditioned windows (constant / near-constant, near-zero variance, non-monotonic Hawkes times) as documented finite sentinels instead of propagating accidental `NaN` or `Inf`.
 - `compute_hurst` no longer reports `h = 0` (antipersistent) for a NaN series: `f64::max` was swallowing NaN during the `[0, 1]` clamp. Constant and non-finite series now use the existing underdetermined sentinel `h = 0.5`.
-- `compute_signal_stats` accumulates the mean with Welford's method; `SMA` recomputes the window sum after each accepted sample; `VolEstimator::rms` squares in `f64` before clamping.
+- `compute_signal_stats` accumulates the mean with Welford's method; `SMA` recomputes the window mean with Welford after each accepted sample; `VolEstimator::rms` squares in `f64` before clamping.
+- Overflow of finite extreme magnitudes (second moments, Hawkes excitation sums, surprise `mu * dt`, z-score quotients, Hurst R/S) now yields the same documented empty/underdetermined sentinels instead of `Inf` results with a normal-looking count or a clamped false Hurst.
 
 ### Added
 
