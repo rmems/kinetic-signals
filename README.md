@@ -172,6 +172,22 @@ Typical execution times (Ryzen 9 9950X):
 - Hawkes (10 events): ~5μs
 - Surprise: ~100ns
 
+## Upgrading from v0.4.x
+
+v0.5.0 adds buffer-reuse APIs. Existing allocating functions keep their
+signatures. The new names are also exported by `prelude`:
+
+| New in v0.5.0 | Role |
+|---------------|------|
+| `compute_surprise_sequence_into` | Reuse a caller `Vec<SurpriseResult>` |
+| `compute_shannon_entropy_into` | Reuse a caller histogram `Vec<usize>` |
+| `surprise_sequence_len` | Output length: `n.saturating_sub(1)` |
+
+If `use kinetic_signals::prelude::*;` is combined with another glob import
+that already defines one of those names, the compiler will report an
+ambiguous glob re-export. Replace the colliding glob with an explicit import,
+or qualify the kinetic-signals item (`kinetic_signals::compute_surprise_sequence_into`).
+
 ## Upgrading from v0.3.x
 
 v0.4.0 removes the deprecated GBM aliases. Replace with the domain-agnostic names:

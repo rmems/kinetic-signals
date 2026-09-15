@@ -42,7 +42,7 @@ pub struct EntropyResult {
 /// assert!(res.relative > 0.0 && res.relative <= 1.0);
 /// ```
 pub fn compute_shannon_entropy(data: &[f64], bins: usize) -> EntropyResult {
-    let mut histogram = Vec::with_capacity(bins);
+    let mut histogram = Vec::new();
     compute_shannon_entropy_into(data, bins, &mut histogram)
 }
 
@@ -219,5 +219,16 @@ mod tests {
         compute_shannon_entropy_into(&[], 4, &mut histogram);
         assert!(histogram.is_empty());
         assert_eq!(histogram.capacity(), cap);
+    }
+
+    #[test]
+    fn test_entropy_degenerate_does_not_reserve_huge_bins() {
+        let empty = compute_shannon_entropy(&[], usize::MAX);
+        assert_eq!(empty.bin_count, 0);
+        let short = compute_shannon_entropy(&[1.0], usize::MAX);
+        assert_eq!(short.bin_count, 0);
+        let constant = compute_shannon_entropy(&[1.0, 1.0], usize::MAX);
+        assert_eq!(constant.bin_count, 1);
+        assert_eq!(constant.shannon, 0.0);
     }
 }

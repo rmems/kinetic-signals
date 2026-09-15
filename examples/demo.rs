@@ -20,7 +20,7 @@ fn pseudo_random_f64(state: &mut u64) -> f64 {
 }
 
 fn main() {
-    println!("=== Kinetic Signals Demo v0.4.0 ===\n");
+    println!("=== Kinetic Signals Demo v0.5.0 ===\n");
 
     demo_hurst();
     demo_hawkes();
