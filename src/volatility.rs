@@ -2,7 +2,9 @@
 
 //! Rolling RMS volatility estimator — zero-alloc, fixed-size ring buffer.
 
-use crate::snapshot::{SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimatorSnapshot};
+use crate::snapshot::{
+    SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimatorSnapshot, alloc_zeros_f32,
+};
 
 /// Rolling RMS volatility estimator over a fixed window.
 ///
@@ -107,11 +109,12 @@ impl VolEstimator {
     /// # Errors
     ///
     /// Returns [`crate::SnapshotError`] when the schema version, capacity,
-    /// sample count, or finiteness checks fail. No estimator is constructed.
+    /// sample count, or finiteness checks fail, or when the ring buffer cannot
+    /// be allocated. No estimator is constructed.
     pub fn from_snapshot(snapshot: &VolEstimatorSnapshot) -> Result<Self, SnapshotError> {
         snapshot.validate()?;
         let n = snapshot.samples.len();
-        let mut buf = vec![0.0; snapshot.capacity];
+        let mut buf = alloc_zeros_f32(snapshot.capacity)?;
         buf[..n].copy_from_slice(&snapshot.samples);
         let full = n == snapshot.capacity;
         let pos = if full { 0 } else { n };

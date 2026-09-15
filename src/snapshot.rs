@@ -36,6 +36,8 @@ pub enum SnapshotError {
     NonFinite,
     /// Count / sum / initialization flags contradict the rest of the snapshot.
     InconsistentState,
+    /// The snapshot asked for a buffer that could not be allocated.
+    AllocationFailed,
 }
 
 impl fmt::Display for SnapshotError {
@@ -57,6 +59,7 @@ impl fmt::Display for SnapshotError {
             Self::InconsistentState => {
                 write!(f, "snapshot fields are internally inconsistent")
             }
+            Self::AllocationFailed => write!(f, "snapshot buffer could not be allocated"),
         }
     }
 }
@@ -88,6 +91,14 @@ pub(crate) fn require_finite_f64(x: f64) -> Result<(), SnapshotError> {
     } else {
         Err(SnapshotError::NonFinite)
     }
+}
+
+pub(crate) fn alloc_zeros_f32(len: usize) -> Result<Vec<f32>, SnapshotError> {
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len)
+        .map_err(|_| SnapshotError::AllocationFailed)?;
+    buf.resize(len, 0.0);
+    Ok(buf)
 }
 
 /// Canonical ring-buffer state for [`crate::VolEstimator`].
@@ -139,9 +150,15 @@ pub struct EMASnapshot {
 
 impl EMASnapshot {
     /// Check version and finiteness without allocating an estimator.
+    ///
+    /// `alpha` must be finite and `> 0`. Values greater than 1 are accepted
+    /// so [`crate::EMA::new`] with `period == 0` (`α = 2`) can round-trip.
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
         require_finite_f64(self.alpha)?;
+        if self.alpha <= 0.0 {
+            return Err(SnapshotError::InconsistentState);
+        }
         if self.initialized {
             require_finite_f64(self.value)?;
         }
@@ -243,6 +260,12 @@ mod tests {
         snap.value = f64::NAN;
         assert_eq!(snap.validate(), Err(SnapshotError::NonFinite));
         snap.initialized = false;
+        assert_eq!(snap.validate(), Ok(()));
+        snap.alpha = 0.0;
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+        snap.alpha = -0.5;
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+        snap.alpha = 2.0;
         assert_eq!(snap.validate(), Ok(()));
     }
 

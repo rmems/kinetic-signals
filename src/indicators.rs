@@ -285,6 +285,15 @@ mod tests {
     }
 
     #[test]
+    fn ema_snapshot_round_trips_period_zero_alpha() {
+        let mut ema = EMA::new(0);
+        ema.update(10.0);
+        let restored = EMA::from_snapshot(&ema.snapshot()).unwrap();
+        assert_eq!(restored.alpha, 2.0);
+        assert_eq!(restored.value, 10.0);
+    }
+
+    #[test]
     fn ema_restore_rejects_non_finite_without_mutating() {
         let mut ema = EMA::new(9);
         ema.update(100.0);

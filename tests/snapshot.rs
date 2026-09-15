@@ -225,6 +225,19 @@ fn from_snapshot_rejects_zero_capacity() {
     ));
 }
 
+#[test]
+fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
+    let snap = VolEstimatorSnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: usize::MAX,
+        samples: vec![],
+    };
+    assert!(matches!(
+        VolEstimator::from_snapshot(&snap),
+        Err(SnapshotError::AllocationFailed)
+    ));
+}
+
 #[cfg(feature = "serde")]
 #[test]
 fn snapshot_serde_roundtrip_preserves_vol_estimator_outputs() {
