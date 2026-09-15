@@ -85,10 +85,11 @@ the `*_into` APIs instead of allocating a new output on every window.
 
 Both wrappers delegate to the `*_into` core, so results are identical.
 
-**Overwrite / resize:** each `_into` call **clears** the buffer, then writes
-the current window (entropy also **resizes** to `bins` when the histogram is
-used). Capacity is never shrunk. A buffer whose `capacity()` is already large
-enough performs **no output allocation** in steady state.
+**Overwrite / resize:** each `_into` call **resizes** the buffer to the
+current window's output length (entropy **clears** on degenerate inputs),
+then **overwrites** every slot. Capacity is never shrunk. A buffer whose
+`capacity()` is already large enough performs **no output allocation** in
+steady state.
 
 **Aliasing:** the input slice and output `Vec` use different element types
 (`f64`/`f32` vs `SurpriseResult`, or `f64` vs `usize`), so they cannot alias

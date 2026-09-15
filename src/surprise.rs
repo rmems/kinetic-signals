@@ -151,14 +151,12 @@ where
 ///
 /// # Buffer length and overwrite
 ///
-/// - `out` is **cleared**, then filled with one [`SurpriseResult`] per
-///   consecutive pair (`values[i-1]` → `values[i]`).
-/// - After return, `out.len() == surprise_sequence_len(values.len())`.
-/// - Previous elements are dropped; remaining **capacity is retained** (this
-///   function never calls `shrink_to_fit`).
-/// - If `out.capacity() >= surprise_sequence_len(values.len())`, a call
-///   performs **no output allocation**. Growing past the current capacity may
-///   allocate, as with any `Vec`.
+/// - `out` is resized to `surprise_sequence_len(values.len())`. Growing
+///   past the current **capacity** may allocate; shrinking only truncates.
+/// - Every slot is then **overwritten** with the result for `values[i-1]` →
+///   `values[i]`. This function never calls `shrink_to_fit`.
+/// - If `out.capacity() >= surprise_sequence_len(values.len())` before the
+///   call, **no output allocation** is performed.
 ///
 /// # Aliasing
 ///
@@ -190,12 +188,18 @@ pub fn compute_surprise_sequence_into<T>(
 ) where
     T: Real,
 {
-    out.clear();
-    out.extend(
-        values
-            .windows(2)
-            .map(|pair| compute_surprise(pair[1], pair[0], params)),
-    );
+    let n = surprise_sequence_len(values.len());
+    if out.len() != n {
+        out.resize_with(n, || SurpriseResult {
+            surprise: T::zero(),
+            log_return: T::zero(),
+            expected_return: T::zero(),
+            z_score: T::zero(),
+        });
+    }
+    for (slot, pair) in out.iter_mut().zip(values.windows(2)) {
+        *slot = compute_surprise(pair[1], pair[0], params);
+    }
 }
 
 /// Return `true` if the result's surprise exceeds the configured threshold.

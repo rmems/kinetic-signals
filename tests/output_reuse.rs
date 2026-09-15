@@ -7,7 +7,7 @@
 //! steady-state output allocations when a pre-sized buffer is reused.
 
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::cell::Cell;
 
 use kinetic_signals::{
     SurpriseParams, compute_shannon_entropy, compute_shannon_entropy_into,
@@ -16,11 +16,17 @@ use kinetic_signals::{
 
 struct CountingAlloc;
 
-static ALLOC_COUNT: AtomicU64 = AtomicU64::new(0);
+thread_local! {
+    static THREAD_ALLOCS: Cell<u64> = const { Cell::new(0) };
+}
+
+fn bump_thread_allocs() {
+    let _ = THREAD_ALLOCS.try_with(|c| c.set(c.get().saturating_add(1)));
+}
 
 unsafe impl GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+        bump_thread_allocs();
         unsafe { System.alloc(layout) }
     }
 
@@ -29,12 +35,12 @@ unsafe impl GlobalAlloc for CountingAlloc {
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+        bump_thread_allocs();
         unsafe { System.alloc_zeroed(layout) }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
+        bump_thread_allocs();
         unsafe { System.realloc(ptr, layout, new_size) }
     }
 }
@@ -42,8 +48,8 @@ unsafe impl GlobalAlloc for CountingAlloc {
 #[global_allocator]
 static GLOBAL: CountingAlloc = CountingAlloc;
 
-fn alloc_count() -> u64 {
-    ALLOC_COUNT.load(Ordering::SeqCst)
+fn thread_allocs() -> u64 {
+    THREAD_ALLOCS.with(Cell::get)
 }
 
 fn assert_surprise_eq(
@@ -107,14 +113,14 @@ fn surprise_presized_reuse_has_no_steady_state_output_allocation() {
     let ptr = out.as_ptr();
     let cap = out.capacity();
 
-    let before = alloc_count();
+    let before = thread_allocs();
     for _ in 0..256 {
         compute_surprise_sequence_into(&values, &params, &mut out);
-        assert_eq!(out.len(), needed);
-        assert_eq!(out.capacity(), cap);
-        assert_eq!(out.as_ptr(), ptr);
     }
-    let after = alloc_count();
+    let after = thread_allocs();
+    assert_eq!(out.len(), needed);
+    assert_eq!(out.capacity(), cap);
+    assert_eq!(out.as_ptr(), ptr);
     assert_eq!(
         after,
         before,
@@ -134,15 +140,16 @@ fn entropy_presized_reuse_has_no_steady_state_output_allocation() {
     let ptr = histogram.as_ptr();
     let cap = histogram.capacity();
 
-    let before = alloc_count();
+    let before = thread_allocs();
     for _ in 0..256 {
-        let reused = compute_shannon_entropy_into(&data, bins, &mut histogram);
-        assert_eq!(histogram.len(), bins);
-        assert_eq!(histogram.capacity(), cap);
-        assert_eq!(histogram.as_ptr(), ptr);
-        assert_eq!(reused.shannon, first.shannon);
+        compute_shannon_entropy_into(&data, bins, &mut histogram);
     }
-    let after = alloc_count();
+    let after = thread_allocs();
+    let reused = compute_shannon_entropy_into(&data, bins, &mut histogram);
+    assert_eq!(reused.shannon, first.shannon);
+    assert_eq!(histogram.len(), bins);
+    assert_eq!(histogram.capacity(), cap);
+    assert_eq!(histogram.as_ptr(), ptr);
     assert_eq!(
         after,
         before,
@@ -155,9 +162,9 @@ fn entropy_presized_reuse_has_no_steady_state_output_allocation() {
 fn allocating_surprise_sequence_records_output_allocation() {
     let params = SurpriseParams::default();
     let values: Vec<f64> = (0..32).map(|i| 100.0 + i as f64).collect();
-    let before = alloc_count();
+    let before = thread_allocs();
     let allocated = compute_surprise_sequence(&values, &params);
-    let after = alloc_count();
+    let after = thread_allocs();
     assert_eq!(allocated.len(), surprise_sequence_len(values.len()));
     assert!(
         after > before,

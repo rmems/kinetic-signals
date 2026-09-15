@@ -57,9 +57,9 @@ pub fn compute_shannon_entropy(data: &[f64], bins: usize) -> EntropyResult {
 /// - Degenerate inputs (`data.len() < 2`, `bins == 0`, or a constant series)
 ///   **clear** `histogram` (`len == 0`) and return the same result as
 ///   [`compute_shannon_entropy`]. Capacity is retained.
-/// - Otherwise `histogram` is **cleared**, **resized** to `bins` (filled with
-///   zeros), then overwritten with occupancy counts. After return,
-///   `histogram.len() == bins` and `histogram[i]` is the count for bin `i`.
+/// - Otherwise `histogram` is resized to `bins` if needed, **zeroed**, then
+///   overwritten with occupancy counts. After return, `histogram.len() == bins`
+///   and `histogram[i]` is the count for bin `i`.
 /// - Remaining **capacity is retained** (this function never calls
 ///   `shrink_to_fit`). If `histogram.capacity() >= bins` on a non-degenerate
 ///   call, no histogram allocation is performed.
@@ -113,8 +113,12 @@ pub fn compute_shannon_entropy_into(
         };
     }
 
-    histogram.clear();
-    histogram.resize(bins, 0);
+    if histogram.len() != bins {
+        histogram.clear();
+        histogram.resize(bins, 0);
+    } else {
+        histogram.fill(0);
+    }
     for &x in data {
         let bin = (((x - min) / range) * (bins as f64 - 1e-9)).floor() as usize;
         let bin = bin.min(bins - 1);
