@@ -1,0 +1,32 @@
+{
+  "tolerance": 1e-06,
+  "schema_version": 1,
+  "vectors": {
+    "vol_estimator_full_window_replay": {
+      "estimator": "VolEstimator",
+      "input": {
+        "window": 5,
+        "segment_a": [0.01, 0.02, 0.015, 0.03, 0.012, 0.025],
+        "segment_b": [0.018, 0.022, 0.016]
+      },
+      "notes": "segment_a fills and wraps the ring (non-empty full window). Continuous A+B RMS must match snapshot after A, restore, then B."
+    },
+    "sma_full_window_replay": {
+      "estimator": "SMA",
+      "input": {
+        "capacity": 3,
+        "segment_a": [1.0, 2.0, 3.0, 4.0],
+        "segment_b": [5.0, 6.0]
+      },
+      "notes": "segment_a leaves a full SMA window. Continuous A+B mean must match snapshot after A, restore, then B."
+    },
+    "ema_replay": {
+      "estimator": "EMA",
+      "input": {
+        "period": 9,
+        "segment_a": [100.0, 110.0, 105.0],
+        "segment_b": [108.0, 112.0]
+      }
+    }
+  }
+}

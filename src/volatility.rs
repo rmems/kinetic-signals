@@ -2,6 +2,10 @@
 
 //! Rolling RMS volatility estimator — zero-alloc, fixed-size ring buffer.
 
+use crate::snapshot::{
+    SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimatorSnapshot, alloc_zeros_f32,
+};
+
 /// Rolling RMS volatility estimator over a fixed window.
 ///
 /// Stores absolute log-returns in a circular buffer and computes
@@ -17,6 +21,7 @@
 /// let vol = v.rms();
 /// assert!(vol > 0.0);
 /// ```
+#[derive(Debug, Clone)]
 pub struct VolEstimator {
     buf: Vec<f32>,
     pos: usize,
@@ -69,6 +74,65 @@ impl VolEstimator {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Capture the physical ring, write head, and wrap flag.
+    ///
+    /// The snapshot schema version is [`crate::SNAPSHOT_SCHEMA_VERSION`].
+    /// Restore with [`Self::restore`] or [`Self::from_snapshot`]. Subsequent
+    /// [`Self::rms`] / [`Self::push`] outputs match a continuously processed
+    /// estimator within [`crate::RESTORE_OUTPUT_TOLERANCE`]. Storage order is
+    /// preserved so `f32` summation is bit-identical after restore.
+    ///
+    /// # Example
+    /// ```rust
+    /// use kinetic_signals::VolEstimator;
+    ///
+    /// let mut a = VolEstimator::new(4);
+    /// a.push(0.01);
+    /// a.push(0.02);
+    /// let snap = a.snapshot();
+    /// assert_eq!(snap.schema_version, kinetic_signals::SNAPSHOT_SCHEMA_VERSION);
+    /// let mut b = VolEstimator::from_snapshot(&snap).unwrap();
+    /// a.push(0.03);
+    /// b.push(0.03);
+    /// assert_eq!(a.rms(), b.rms());
+    /// ```
+    pub fn snapshot(&self) -> VolEstimatorSnapshot {
+        VolEstimatorSnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: self.cap,
+            pos: self.pos,
+            full: self.full,
+            samples: self.buf.clone(),
+        }
+    }
+
+    /// Build an estimator from a validated snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::SnapshotError`] when the schema version, capacity,
+    /// sample count, or finiteness checks fail, or when the ring buffer cannot
+    /// be allocated. No estimator is constructed.
+    pub fn from_snapshot(snapshot: &VolEstimatorSnapshot) -> Result<Self, SnapshotError> {
+        snapshot.validate()?;
+        let mut buf = alloc_zeros_f32(snapshot.capacity)?;
+        buf.copy_from_slice(&snapshot.samples);
+        Ok(Self {
+            buf,
+            pos: snapshot.pos,
+            full: snapshot.full,
+            cap: snapshot.capacity,
+        })
+    }
+
+    /// Replace `self` with a restored snapshot.
+    ///
+    /// On failure `self` is left unchanged.
+    pub fn restore(&mut self, snapshot: &VolEstimatorSnapshot) -> Result<(), SnapshotError> {
+        *self = Self::from_snapshot(snapshot)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -105,5 +169,62 @@ mod tests {
     #[should_panic(expected = "capacity must be > 0")]
     fn test_vol_estimator_zero_capacity_panics() {
         let _ = VolEstimator::new(0);
+    }
+
+    #[test]
+    fn snapshot_restore_matches_continuous_after_wrap() {
+        let series: Vec<f32> = (1..12).map(|i| i as f32 * 0.01).collect();
+        let (a, b) = series.split_at(7);
+
+        let mut continuous = VolEstimator::new(4);
+        for &x in a.iter().chain(b) {
+            continuous.push(x);
+        }
+
+        let mut restored = VolEstimator::new(4);
+        for &x in a {
+            restored.push(x);
+        }
+        let snap = restored.snapshot();
+        restored.restore(&snap).unwrap();
+        for &x in b {
+            restored.push(x);
+        }
+
+        assert_eq!(continuous.rms(), restored.rms());
+        assert_eq!(continuous.len(), restored.len());
+    }
+
+    #[test]
+    fn snapshot_preserves_rms_summation_order_after_wrap() {
+        let cap = 10_000;
+        let mut v = VolEstimator::new(cap);
+        for _ in 0..cap {
+            v.push(0.01);
+        }
+        for _ in 0..cap / 2 {
+            v.push(1.0);
+        }
+        let restored = VolEstimator::from_snapshot(&v.snapshot()).unwrap();
+        assert_eq!(v.rms(), restored.rms());
+    }
+
+    #[test]
+    fn restore_rejects_non_finite_without_mutating() {
+        let mut est = VolEstimator::new(3);
+        est.push(0.1);
+        est.push(0.2);
+        let before_rms = est.rms();
+        let before_len = est.len();
+        let bad = VolEstimatorSnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: 3,
+            pos: 2,
+            full: false,
+            samples: vec![0.1, f32::NAN, 0.0],
+        };
+        assert_eq!(est.restore(&bad), Err(SnapshotError::NonFinite));
+        assert_eq!(est.len(), before_len);
+        assert_eq!(est.rms(), before_rms);
     }
 }

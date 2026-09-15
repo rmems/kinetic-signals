@@ -19,7 +19,7 @@ fn pseudo_random_f64(state: &mut u64) -> f64 {
 }
 
 fn main() {
-    println!("=== Kinetic Signals Demo v0.4.0 ===\n");
+    println!("=== Kinetic Signals Demo v0.5.0 ===\n");
 
     demo_hurst();
     demo_hawkes();
@@ -222,6 +222,16 @@ fn demo_volatility() {
         estimator.rms(),
         5,
         estimator.len()
+    );
+
+    let snap = estimator.snapshot();
+    let mut resumed = VolEstimator::from_snapshot(&snap).expect("valid snapshot");
+    resumed.push(0.02);
+    estimator.push(0.02);
+    println!(
+        "After snapshot/restore + one push: continuous_rms={:.4} restored_rms={:.4}",
+        estimator.rms(),
+        resumed.rms()
     );
     println!();
 }

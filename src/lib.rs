@@ -16,6 +16,7 @@
 //! - **Volatility** - Real-time variance and standard deviation tracking
 //! - **Shannon Entropy** - Measures signal complexity and information density
 //! - **Indicators** - Moving averages (EMA, SMA) and Z-score tracking
+//! - **Snapshot / restore** - Versioned checkpoints for `VolEstimator`, `EMA`, and `SMA`
 //!
 //! ## Performance (Ryzen 9 9950X)
 //!
@@ -40,6 +41,7 @@ pub mod hawkes;
 pub mod hurst;
 pub mod indicators;
 mod real;
+pub mod snapshot;
 pub mod stats;
 pub mod surprise;
 pub mod volatility;
@@ -48,6 +50,10 @@ pub use entropy::{EntropyResult, compute_shannon_entropy};
 pub use hawkes::{HawkesParams, HawkesResult, compute_hawkes, compute_hawkes_streaming};
 pub use hurst::{HurstResult, compute_hurst};
 pub use indicators::{EMA, SMA, ZScore};
+pub use snapshot::{
+    EMASnapshot, RESTORE_OUTPUT_TOLERANCE, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError,
+    VolEstimatorSnapshot,
+};
 pub use stats::{SignalStats, compute_signal_stats};
 pub use surprise::{
     SurpriseParams, SurpriseResult, compute_surprise, compute_surprise_sequence, detect_anomaly,
@@ -55,8 +61,8 @@ pub use surprise::{
 pub use volatility::VolEstimator;
 
 /// Convenience glob-import of every public type and function from the
-/// crate's computation modules (entropy, hawkes, hurst, indicators, stats,
-/// surprise, volatility). Application-level observability integrations are
+/// crate's computation modules (entropy, hawkes, hurst, indicators, snapshot,
+/// stats, surprise, volatility). Application-level observability integrations are
 /// intentionally outside this signal-processing crate.
 ///
 /// The prelude is covered by the crate's pre-1.0 SemVer policy (see the
@@ -73,6 +79,7 @@ pub mod prelude {
     pub use crate::hawkes::*;
     pub use crate::hurst::*;
     pub use crate::indicators::*;
+    pub use crate::snapshot::*;
     pub use crate::stats::*;
     pub use crate::surprise::*;
     pub use crate::volatility::*;
@@ -84,6 +91,10 @@ pub mod prelude {
 fn _assert_send_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<VolEstimator>();
+    assert_send_sync::<VolEstimatorSnapshot>();
+    assert_send_sync::<EMASnapshot>();
+    assert_send_sync::<SMASnapshot>();
+    assert_send_sync::<SnapshotError>();
     assert_send_sync::<HurstResult>();
     assert_send_sync::<HurstResult<f32>>();
     assert_send_sync::<HawkesResult>();
