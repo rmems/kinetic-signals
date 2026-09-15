@@ -35,10 +35,19 @@
 //! let surprise = compute_surprise(150.0, 100.0, &params);
 //! ```
 //!
+//! ## Numeric contract
+//!
+//! Public numerical APIs expect finite inputs. Non-finite values (`NaN`,
+//! `±Inf`) and other ill-conditioned cases (empty/short series, constant
+//! windows, non-positive surprise samples, near-zero variance) yield a
+//! **documented finite sentinel** rather than an accidental `NaN`. See each
+//! function's rustdoc and the README "Numeric input contract" table.
+//!
 pub mod entropy;
 pub mod hawkes;
 pub mod hurst;
 pub mod indicators;
+mod numeric;
 mod real;
 pub mod stats;
 pub mod surprise;
