@@ -230,6 +230,60 @@ fn from_snapshot_rejects_zero_capacity() {
 }
 
 #[test]
+fn snapshot_restore_rejects_invalid_length_and_non_finite_without_mutating() {
+    let mut vol = VolEstimator::new(2);
+    vol.push(0.1);
+    let before_rms = vol.rms();
+    let before_len = vol.len();
+    let oversized = VolEstimatorSnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: 2,
+        pos: 0,
+        full: false,
+        samples: vec![0.1, 0.2, 0.3],
+    };
+    assert_eq!(vol.restore(&oversized), Err(SnapshotError::InvalidLength));
+    assert_eq!(vol.len(), before_len);
+    assert_eq!(vol.rms(), before_rms);
+
+    let mut sma = SMA::new(2);
+    sma.update(1.0);
+    let sma_before = sma.clone();
+    let nan_window = SMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: 2,
+        window: vec![f64::NAN],
+        sum: 0.0,
+    };
+    assert_eq!(sma.restore(&nan_window), Err(SnapshotError::NonFinite));
+    assert_eq!(sma.window, sma_before.window);
+    assert_eq!(sma.sum, sma_before.sum);
+
+    let inf_sum = SMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: 2,
+        window: vec![1.0],
+        sum: f64::INFINITY,
+    };
+    assert_eq!(sma.restore(&inf_sum), Err(SnapshotError::NonFinite));
+    assert_eq!(sma.window, sma_before.window);
+    assert_eq!(sma.sum, sma_before.sum);
+
+    let mut ema = EMA::new(4);
+    ema.update(10.0);
+    let ema_before = ema.clone();
+    let nan_alpha = EMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        value: ema.value,
+        alpha: f64::NAN,
+        initialized: true,
+    };
+    assert_eq!(ema.restore(&nan_alpha), Err(SnapshotError::NonFinite));
+    assert_eq!(ema.value, ema_before.value);
+    assert_eq!(ema.alpha, ema_before.alpha);
+}
+
+#[test]
 fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
     let snap = VolEstimatorSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,

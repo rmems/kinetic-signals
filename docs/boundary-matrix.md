@@ -38,7 +38,7 @@ Domain-agnostic streaming feature extraction for stochastic signals. Computes re
 | Dependency | Reason |
 |------------|--------|
 | `serde_json` (dev) | Deserialize shared golden fixtures in tests |
-| `serde` (optional) | Snapshot JSON (de)serialization behind the `serde` feature |
+| `serde` (optional) | Format-agnostic `Serialize`/`Deserialize` on snapshot types |
 
 ### Forbidden (by design)
 
