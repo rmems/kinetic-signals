@@ -41,7 +41,7 @@ fn snapshot_replay_fixture_schema_version_matches_crate() {
 }
 
 #[test]
-fn vol_estimator_full_window_replay_matches_continuous() {
+fn snapshot_vol_estimator_full_window_replay_matches_continuous() {
     let v = &fixture()["vectors"]["vol_estimator_full_window_replay"];
     let input = &v["input"];
     let window = require_usize(input, "window");
@@ -85,7 +85,7 @@ fn vol_estimator_full_window_replay_matches_continuous() {
 }
 
 #[test]
-fn sma_full_window_replay_matches_continuous() {
+fn snapshot_sma_full_window_replay_matches_continuous() {
     let v = &fixture()["vectors"]["sma_full_window_replay"];
     let input = &v["input"];
     let capacity = require_usize(input, "capacity");
@@ -120,7 +120,7 @@ fn sma_full_window_replay_matches_continuous() {
 }
 
 #[test]
-fn ema_replay_matches_continuous() {
+fn snapshot_ema_replay_matches_continuous() {
     let v = &fixture()["vectors"]["ema_replay"];
     let input = &v["input"];
     let period = require_usize(input, "period");
@@ -152,7 +152,7 @@ fn ema_replay_matches_continuous() {
 }
 
 #[test]
-fn restore_incompatible_version_does_not_mutate_destination() {
+fn snapshot_restore_incompatible_version_does_not_mutate() {
     let mut vol = VolEstimator::new(2);
     vol.push(0.1);
     let before = vol.rms();
@@ -227,7 +227,7 @@ fn from_snapshot_rejects_zero_capacity() {
 
 #[cfg(feature = "serde")]
 #[test]
-fn serde_roundtrip_preserves_vol_estimator_outputs() {
+fn snapshot_serde_roundtrip_preserves_vol_estimator_outputs() {
     let mut src = VolEstimator::new(4);
     for x in [0.01_f32, 0.04, 0.03, 0.02, 0.05] {
         src.push(x);
