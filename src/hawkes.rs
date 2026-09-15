@@ -87,8 +87,8 @@ fn empty_result(params: &HawkesParams) -> HawkesResult {
 /// event times or parameters, or `mu < 0` / `alpha < 0` / `beta < 0`, yield
 /// the same empty-history sentinel (`event_count = 0`, `intensity = μ` when
 /// `μ` is finite, else `0`). Overflow of the excitation sum also yields that
-/// sentinel. Negative inter-event gaps are clamped to zero so a non-monotonic
-/// history cannot explode via `exp(+large)`.
+/// sentinel. Event times must be non-decreasing; a decrease is the same
+/// empty sentinel (streaming ignores a backwards tick instead of clamping).
 ///
 /// # Example
 ///
@@ -103,6 +103,9 @@ fn empty_result(params: &HawkesParams) -> HawkesResult {
 /// ```
 pub fn compute_hawkes(event_times: &[f64], params: &HawkesParams) -> HawkesResult {
     if !params_usable(params) || event_times.is_empty() || !all_finite(event_times) {
+        return empty_result(params);
+    }
+    if event_times.windows(2).any(|w| w[1] < w[0]) {
         return empty_result(params);
     }
 
@@ -131,9 +134,10 @@ pub fn compute_hawkes(event_times: &[f64], params: &HawkesParams) -> HawkesResul
 /// Maintains a running decayed event-count sum so each step is O(1).
 ///
 /// Non-finite timestamps, decay state, or parameters return
-/// `(μ, decay_sum)` with non-finite fields replaced by `0`. A negative `dt`
-/// (clock going backwards) is clamped to `0` so the exponential kernel cannot
-/// overflow. Negative `decay_sum` is clamped to `0`.
+/// `(μ, decay_sum)` with non-finite fields replaced by `0`, preserving any
+/// finite decay history. A tick that goes backwards in time is ignored
+/// (decay is unchanged; intensity is `μ + α · decay_sum`). Negative
+/// `decay_sum` is clamped to `0`.
 ///
 /// The returned intensity is the **pre-jump** value. The matching post-event
 /// intensity (comparable to [`compute_hawkes`]) is
@@ -178,18 +182,22 @@ pub fn compute_hawkes_streaming(
     decay_sum: f64,
 ) -> (f64, f64) {
     if !params_usable(params) {
-        return (0.0, 0.0);
+        return (finite_or_zero(params.mu), finite_or_zero(decay_sum));
     }
     if !new_event_time.is_finite() || !last_event_time.is_finite() || !decay_sum.is_finite() {
-        return (params.mu, finite_or_zero(decay_sum));
+        return (finite_or_zero(params.mu), finite_or_zero(decay_sum));
+    }
+    if new_event_time < last_event_time {
+        let kept = decay_sum.max(0.0);
+        return (finite_or_zero(params.mu + params.alpha * kept), kept);
     }
 
-    let dt = (new_event_time - last_event_time).max(0.0);
+    let dt = new_event_time - last_event_time;
     let decayed_sum = decay_sum.max(0.0) * (-params.beta * dt).exp();
     let new_intensity = params.mu + params.alpha * decayed_sum;
     let new_decay_sum = decayed_sum + 1.0;
     if !new_intensity.is_finite() || !new_decay_sum.is_finite() {
-        return (params.mu, 0.0);
+        return (finite_or_zero(params.mu), finite_or_zero(decay_sum));
     }
     (new_intensity, new_decay_sum)
 }
@@ -341,8 +349,27 @@ mod tests {
         let params = HawkesParams::default();
         let (intensity, decay) = compute_hawkes_streaming(0.0, 0.0, 1e9, &params, 1.0);
         assert!(intensity.is_finite());
-        assert!(decay.is_finite());
-        assert!(intensity >= params.mu);
+        assert!((decay - 1.0).abs() < 1e-12);
+        assert!((intensity - (params.mu + params.alpha)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_hawkes_nonmonotonic_batch_is_empty() {
+        let params = HawkesParams::default();
+        let r = compute_hawkes(&[0.0, 2.0, 1.0], &params);
+        assert_eq!(r.event_count, 0);
+        assert_eq!(r.intensity, params.mu);
+    }
+
+    #[test]
+    fn test_hawkes_streaming_invalid_params_keep_decay() {
+        let bad = HawkesParams {
+            alpha: f64::NAN,
+            ..HawkesParams::default()
+        };
+        let (i, d) = compute_hawkes_streaming(0.0, 1.0, 0.0, &bad, 2.0);
+        assert_eq!(i, bad.mu);
+        assert_eq!(d, 2.0);
     }
 
     #[test]

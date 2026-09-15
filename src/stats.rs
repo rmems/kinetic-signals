@@ -7,7 +7,7 @@
 //! the slice). Suitable for batch feature extraction; for streaming variance
 //! prefer [`crate::VolEstimator`].
 
-use crate::numeric::{all_finite, welford_mean};
+use crate::numeric::{all_finite, stable_mean};
 
 /// Central moments and shape descriptors of a signal sample.
 #[derive(Debug, Clone)]
@@ -64,7 +64,9 @@ pub fn compute_signal_stats(data: &[f64]) -> SignalStats {
 
     let n = data.len();
     let n_f = n as f64;
-    let mean = welford_mean(data);
+    let Some(mean) = stable_mean(data) else {
+        return empty_stats();
+    };
 
     let mut m2 = 0.0;
     let mut m3 = 0.0;
@@ -186,5 +188,12 @@ mod tests {
         assert_eq!(stats.count, 0);
         assert_eq!(stats.mean, 0.0);
         assert_eq!(stats.variance, 0.0);
+    }
+
+    #[test]
+    fn test_signal_stats_opposite_max_mean_not_inf() {
+        let stats = compute_signal_stats(&[f64::MAX, -f64::MAX]);
+        assert!(stats.mean.is_finite());
+        assert!(stats.variance.is_finite());
     }
 }

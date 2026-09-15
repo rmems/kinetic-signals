@@ -9,7 +9,7 @@
 //! - [`SMA`] — fixed-window simple moving average
 //! - [`ZScore`] — z-score (standard-score) normalization helper
 
-use crate::numeric::{finite_or_zero, welford_mean};
+use crate::numeric::{finite_or_zero, stable_mean};
 
 /// Exponential moving average (EMA) for streaming data.
 ///
@@ -126,11 +126,9 @@ pub struct SMA {
 impl SMA {
     /// Create an SMA that retains at most `capacity` samples.
     ///
-    /// # Panics
-    ///
-    /// Panics if `capacity` is `0`.
+    /// `capacity == 0` is retained for compatibility: construction succeeds
+    /// and [`update`](SMA::update) is a no-op that returns `0.0`.
     pub fn new(capacity: usize) -> Self {
-        assert!(capacity > 0, "capacity must be > 0");
         Self {
             window: Vec::with_capacity(capacity),
             capacity,
@@ -143,25 +141,26 @@ impl SMA {
     /// Non-finite `new_value` leaves the window unchanged and returns the
     /// current mean (`0.0` when empty).
     pub fn update(&mut self, new_value: f64) -> f64 {
+        if self.capacity == 0 {
+            return 0.0;
+        }
         if !new_value.is_finite() {
             return if self.window.is_empty() {
                 0.0
             } else {
-                finite_or_zero(welford_mean(&self.window))
+                stable_mean(&self.window).map_or(0.0, finite_or_zero)
             };
         }
         if self.window.len() == self.capacity {
             self.window.remove(0);
         }
         self.window.push(new_value);
-        let mean = welford_mean(&self.window);
-        if !mean.is_finite() {
+        let Some(mean) = stable_mean(&self.window) else {
             self.sum = 0.0;
             return 0.0;
-        }
+        };
         let n = self.window.len() as f64;
-        let sum = mean * n;
-        self.sum = finite_or_zero(sum);
+        self.sum = finite_or_zero(mean * n);
         mean
     }
 }
@@ -257,9 +256,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "capacity must be > 0")]
-    fn test_sma_zero_capacity_panics() {
-        let _ = SMA::new(0);
+    fn test_sma_zero_capacity_is_noop() {
+        let mut sma = SMA::new(0);
+        assert_eq!(sma.update(1.0), 0.0);
+        assert!(sma.window.is_empty());
+        assert_eq!(sma.update(f64::NAN), 0.0);
     }
 
     #[test]
@@ -275,8 +276,8 @@ mod tests {
     fn test_sma_opposite_extremes_mean_is_finite() {
         let mut sma = SMA::new(2);
         sma.update(f64::MAX);
-        let mean = sma.update(f64::MAX);
+        let mean = sma.update(-f64::MAX);
         assert!(mean.is_finite());
-        assert_eq!(mean, f64::MAX);
+        assert_eq!(mean, 0.0);
     }
 }
