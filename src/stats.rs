@@ -7,6 +7,8 @@
 //! the slice). Suitable for batch feature extraction; for streaming variance
 //! prefer [`crate::VolEstimator`].
 
+use crate::numeric::all_finite;
+
 /// Central moments and shape descriptors of a signal sample.
 #[derive(Debug, Clone)]
 pub struct SignalStats {
@@ -22,10 +24,33 @@ pub struct SignalStats {
     pub count: usize,
 }
 
+fn empty_stats() -> SignalStats {
+    SignalStats {
+        mean: 0.0,
+        variance: 0.0,
+        skewness: 0.0,
+        kurtosis: 0.0,
+        count: 0,
+    }
+}
+
+fn welford_mean(data: &[f64]) -> f64 {
+    let mut mean = 0.0;
+    for (i, &x) in data.iter().enumerate() {
+        mean += (x - mean) / (i + 1) as f64;
+    }
+    mean
+}
+
 /// Compute high-order moments for a signal using a single-pass algorithm
 /// (after the mean is computed).
 ///
-/// Returns an all-zero result for an empty slice.
+/// Returns an all-zero result for an empty slice. Any non-finite sample
+/// yields the same empty sentinel (`count = 0`) so a poisoned window cannot
+/// emit `NaN` moments. Constant and near-constant series return `0` skewness
+/// and kurtosis instead of dividing by a vanishing standard deviation.
+/// The mean is accumulated with Welford's method so extreme finite magnitudes
+/// do not overflow the first-pass sum.
 ///
 /// # Example
 ///
@@ -39,24 +64,17 @@ pub struct SignalStats {
 /// assert!(stats.variance > 0.0);
 /// ```
 pub fn compute_signal_stats(data: &[f64]) -> SignalStats {
-    let n = data.len();
-    if n == 0 {
-        return SignalStats {
-            mean: 0.0,
-            variance: 0.0,
-            skewness: 0.0,
-            kurtosis: 0.0,
-            count: 0,
-        };
+    if data.is_empty() || !all_finite(data) {
+        return empty_stats();
     }
 
+    let n = data.len();
     let n_f = n as f64;
-    let mean = data.iter().sum::<f64>() / n_f;
+    let mean = welford_mean(data);
 
     let mut m2 = 0.0;
     let mut m3 = 0.0;
     let mut m4 = 0.0;
-
     for &x in data {
         let diff = x - mean;
         let d2 = diff * diff;
@@ -67,14 +85,12 @@ pub fn compute_signal_stats(data: &[f64]) -> SignalStats {
 
     let var = m2 / n_f;
     let std = var.sqrt();
-
-    let skew = if std > 1e-12 {
+    let skew = if std > 1e-12 && std.is_finite() && m3.is_finite() {
         (m3 / n_f) / (std * var)
     } else {
         0.0
     };
-
-    let kurt = if var > 1e-12 {
+    let kurt = if var > 1e-12 && var.is_finite() && m4.is_finite() {
         (m4 / n_f) / (var * var) - 3.0
     } else {
         0.0
@@ -83,8 +99,8 @@ pub fn compute_signal_stats(data: &[f64]) -> SignalStats {
     SignalStats {
         mean,
         variance: var,
-        skewness: skew,
-        kurtosis: kurt,
+        skewness: if skew.is_finite() { skew } else { 0.0 },
+        kurtosis: if kurt.is_finite() { kurt } else { 0.0 },
         count: n,
     }
 }
@@ -99,7 +115,6 @@ mod tests {
         let stats = compute_signal_stats(&data);
         assert_eq!(stats.mean, 3.0);
         assert!(stats.variance > 0.0);
-        // Normal-ish distribution should have low skewness
         assert!(stats.skewness.abs() < 0.1);
     }
 
@@ -132,5 +147,39 @@ mod tests {
         assert_eq!(stats.variance, 0.0);
         assert_eq!(stats.skewness, 0.0);
         assert_eq!(stats.kurtosis, 0.0);
+    }
+
+    #[test]
+    fn test_signal_stats_nonfinite_is_empty() {
+        let nan = compute_signal_stats(&[1.0, f64::NAN, 3.0]);
+        assert_eq!(nan.count, 0);
+        assert_eq!(nan.mean, 0.0);
+        assert!(nan.variance.is_finite() && nan.skewness.is_finite());
+
+        let inf = compute_signal_stats(&[1.0, f64::INFINITY]);
+        assert_eq!(inf.count, 0);
+        assert_eq!(inf.mean, 0.0);
+    }
+
+    #[test]
+    fn test_signal_stats_near_constant_no_nan() {
+        let data = [1.0, 1.0 + 1e-18, 1.0];
+        let stats = compute_signal_stats(&data);
+        assert_eq!(stats.count, 3);
+        assert!(stats.mean.is_finite());
+        assert!(stats.variance.is_finite());
+        assert!(stats.skewness.is_finite());
+        assert!(stats.kurtosis.is_finite());
+    }
+
+    #[test]
+    fn test_signal_stats_extreme_finite_mean() {
+        let data = [1e12, 1e12 + 1.0, 1e12 + 2.0];
+        let stats = compute_signal_stats(&data);
+        assert_eq!(stats.count, 3);
+        assert!((stats.mean - (1e12 + 1.0)).abs() < 1e-3);
+        assert!(stats.variance.is_finite() && stats.variance > 0.0);
+        assert!(stats.skewness.is_finite());
+        assert!(stats.kurtosis.is_finite());
     }
 }

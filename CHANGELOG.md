@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- Public numerical APIs now treat non-finite inputs (`NaN`, `±Inf`) and ill-conditioned windows (constant / near-constant, near-zero variance, non-monotonic Hawkes times) as documented finite sentinels instead of propagating accidental `NaN` or `Inf`.
+- `compute_hurst` no longer reports `h = 0` (antipersistent) for a NaN series: `f64::max` was swallowing NaN during the `[0, 1]` clamp. Constant and non-finite series now use the existing underdetermined sentinel `h = 0.5`.
+- `compute_signal_stats` accumulates the mean with Welford's method; `SMA` recomputes the window sum after each accepted sample; `VolEstimator::rms` squares in `f64` before clamping.
+
+### Added
+
+- Crate- and per-API documentation of the finite-input / finite-output contract, plus regression and property tests for constant, near-constant, extreme finite, NaN, and `±Inf` cases. Batch Hawkes intensity is asserted to match the streaming post-event form `μ + α · decay_sum`.
+
 ### Removed
 
 - Dropped the Qodana GitHub Actions workflow and `QODANA_TOKEN` / `QODANA_ENDPOINT` usage after membership expired.
