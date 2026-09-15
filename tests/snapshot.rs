@@ -159,7 +159,9 @@ fn snapshot_restore_incompatible_version_does_not_mutate() {
     let bad = VolEstimatorSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION + 1,
         capacity: 2,
-        samples: vec![0.1],
+        pos: 1,
+        full: false,
+        samples: vec![0.1, 0.0],
     };
     assert!(matches!(
         vol.restore(&bad),
@@ -206,6 +208,8 @@ fn from_snapshot_rejects_zero_capacity() {
     let vol = VolEstimatorSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         capacity: 0,
+        pos: 0,
+        full: false,
         samples: vec![],
     };
     assert!(matches!(
@@ -230,11 +234,13 @@ fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
     let snap = VolEstimatorSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         capacity: usize::MAX,
+        pos: 0,
+        full: false,
         samples: vec![],
     };
     assert!(matches!(
         VolEstimator::from_snapshot(&snap),
-        Err(SnapshotError::AllocationFailed)
+        Err(SnapshotError::InvalidLength)
     ));
 }
 

@@ -150,7 +150,7 @@ JSON (de)serialization of snapshot structs is available behind the optional
 `serde` feature:
 
 ```toml
-kinetic-signals = { version = "0.4", features = ["serde"] }
+kinetic-signals = { version = "0.5", features = ["serde"] }
 ```
 
 ## Performance
@@ -161,6 +161,15 @@ Typical execution times (Ryzen 9 9950X):
 - Hurst (100 samples): ~50μs
 - Hawkes (10 events): ~5μs
 - Surprise: ~100ns
+
+## Upgrading from v0.4.x
+
+v0.5.0 adds snapshot/restore APIs. Existing estimator constructors, `push` /
+`update`, and batch functions are unchanged. Downstream crates that glob-import
+`kinetic_signals::prelude::*` should watch for name collisions with
+`SNAPSHOT_SCHEMA_VERSION`, `RESTORE_OUTPUT_TOLERANCE`, `SnapshotError`,
+`VolEstimatorSnapshot`, `EMASnapshot`, and `SMASnapshot`. Enable JSON
+checkpoints with `features = ["serde"]`.
 
 ## Upgrading from v0.3.x
 

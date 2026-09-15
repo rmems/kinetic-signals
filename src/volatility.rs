@@ -75,12 +75,13 @@ impl VolEstimator {
         self.len() == 0
     }
 
-    /// Capture occupied samples in oldest-first order.
+    /// Capture the physical ring, write head, and wrap flag.
     ///
     /// The snapshot schema version is [`crate::SNAPSHOT_SCHEMA_VERSION`].
     /// Restore with [`Self::restore`] or [`Self::from_snapshot`]. Subsequent
     /// [`Self::rms`] / [`Self::push`] outputs match a continuously processed
-    /// estimator within [`crate::RESTORE_OUTPUT_TOLERANCE`].
+    /// estimator within [`crate::RESTORE_OUTPUT_TOLERANCE`]. Storage order is
+    /// preserved so `f32` summation is bit-identical after restore.
     ///
     /// # Example
     /// ```rust
@@ -94,13 +95,15 @@ impl VolEstimator {
     /// let mut b = VolEstimator::from_snapshot(&snap).unwrap();
     /// a.push(0.03);
     /// b.push(0.03);
-    /// assert!((a.rms() - b.rms()).abs() < kinetic_signals::RESTORE_OUTPUT_TOLERANCE as f32);
+    /// assert_eq!(a.rms(), b.rms());
     /// ```
     pub fn snapshot(&self) -> VolEstimatorSnapshot {
         VolEstimatorSnapshot {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
             capacity: self.cap,
-            samples: self.occupied_oldest_first(),
+            pos: self.pos,
+            full: self.full,
+            samples: self.buf.clone(),
         }
     }
 
@@ -113,15 +116,12 @@ impl VolEstimator {
     /// be allocated. No estimator is constructed.
     pub fn from_snapshot(snapshot: &VolEstimatorSnapshot) -> Result<Self, SnapshotError> {
         snapshot.validate()?;
-        let n = snapshot.samples.len();
         let mut buf = alloc_zeros_f32(snapshot.capacity)?;
-        buf[..n].copy_from_slice(&snapshot.samples);
-        let full = n == snapshot.capacity;
-        let pos = if full { 0 } else { n };
+        buf.copy_from_slice(&snapshot.samples);
         Ok(Self {
             buf,
-            pos,
-            full,
+            pos: snapshot.pos,
+            full: snapshot.full,
             cap: snapshot.capacity,
         })
     }
@@ -133,26 +133,11 @@ impl VolEstimator {
         *self = Self::from_snapshot(snapshot)?;
         Ok(())
     }
-
-    fn occupied_oldest_first(&self) -> Vec<f32> {
-        let n = self.len();
-        if n == 0 {
-            return Vec::new();
-        }
-        if !self.full {
-            return self.buf[..n].to_vec();
-        }
-        let mut out = Vec::with_capacity(n);
-        out.extend_from_slice(&self.buf[self.pos..]);
-        out.extend_from_slice(&self.buf[..self.pos]);
-        out
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::snapshot::RESTORE_OUTPUT_TOLERANCE;
 
     #[test]
     fn test_rms_three_values() {
@@ -206,8 +191,22 @@ mod tests {
             restored.push(x);
         }
 
-        assert!((continuous.rms() - restored.rms()).abs() < RESTORE_OUTPUT_TOLERANCE as f32);
+        assert_eq!(continuous.rms(), restored.rms());
         assert_eq!(continuous.len(), restored.len());
+    }
+
+    #[test]
+    fn snapshot_preserves_rms_summation_order_after_wrap() {
+        let cap = 10_000;
+        let mut v = VolEstimator::new(cap);
+        for _ in 0..cap {
+            v.push(0.01);
+        }
+        for _ in 0..cap / 2 {
+            v.push(1.0);
+        }
+        let restored = VolEstimator::from_snapshot(&v.snapshot()).unwrap();
+        assert_eq!(v.rms(), restored.rms());
     }
 
     #[test]
@@ -220,7 +219,9 @@ mod tests {
         let bad = VolEstimatorSnapshot {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
             capacity: 3,
-            samples: vec![0.1, f32::NAN],
+            pos: 2,
+            full: false,
+            samples: vec![0.1, f32::NAN, 0.0],
         };
         assert_eq!(est.restore(&bad), Err(SnapshotError::NonFinite));
         assert_eq!(est.len(), before_len);

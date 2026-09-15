@@ -103,8 +103,9 @@ pub(crate) fn alloc_zeros_f32(len: usize) -> Result<Vec<f32>, SnapshotError> {
 
 /// Canonical ring-buffer state for [`crate::VolEstimator`].
 ///
-/// `samples` are oldest-first occupied slots (`samples.len() <= capacity`).
-/// Restore rebuilds a compact ring with the write head after the newest sample.
+/// `samples` is the physical ring (`samples.len() == capacity`) in storage
+/// order, not rotated oldest-first, so [`crate::VolEstimator::rms`] summation
+/// order is preserved across restore.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VolEstimatorSnapshot {
@@ -112,20 +113,27 @@ pub struct VolEstimatorSnapshot {
     pub schema_version: u32,
     /// Ring capacity (`> 0`).
     pub capacity: usize,
-    /// Occupied samples, oldest first.
+    /// Next write index (`< capacity`).
+    pub pos: usize,
+    /// Whether the ring has wrapped.
+    pub full: bool,
+    /// Physical ring slots, length equal to `capacity`.
     pub samples: Vec<f32>,
 }
 
 impl VolEstimatorSnapshot {
-    /// Check version, capacity, length, and finiteness without allocating an
+    /// Check version, capacity, layout, and finiteness without allocating an
     /// estimator.
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
         if self.capacity == 0 {
             return Err(SnapshotError::InvalidCapacity);
         }
-        if self.samples.len() > self.capacity {
+        if self.samples.len() != self.capacity {
             return Err(SnapshotError::InvalidLength);
+        }
+        if self.pos >= self.capacity {
+            return Err(SnapshotError::InconsistentState);
         }
         for &x in &self.samples {
             require_finite_f32(x)?;
@@ -198,7 +206,16 @@ impl SMASnapshot {
             require_finite_f64(x)?;
         }
         require_finite_f64(self.sum)?;
-        if self.window.is_empty() && self.sum != 0.0 {
+        if self.window.is_empty() {
+            if self.sum != 0.0 {
+                return Err(SnapshotError::InconsistentState);
+            }
+            return Ok(());
+        }
+        let recomputed: f64 = self.window.iter().copied().sum();
+        let scale = self.sum.abs().max(recomputed.abs()).max(1.0);
+        let bound = RESTORE_OUTPUT_TOLERANCE * scale * (self.window.len() as f64);
+        if (self.sum - recomputed).abs() > bound {
             return Err(SnapshotError::InconsistentState);
         }
         Ok(())
@@ -227,6 +244,8 @@ mod tests {
         let mut snap = VolEstimatorSnapshot {
             schema_version: 99,
             capacity: 2,
+            pos: 0,
+            full: true,
             samples: vec![0.1, 0.2],
         };
         assert!(matches!(
@@ -238,11 +257,18 @@ mod tests {
         ));
         snap.schema_version = SNAPSHOT_SCHEMA_VERSION;
         snap.capacity = 0;
+        snap.samples = vec![];
+        snap.pos = 0;
+        snap.full = false;
         assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
-        snap.capacity = 1;
-        assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
         snap.capacity = 2;
-        snap.samples = vec![f32::NAN];
+        snap.samples = vec![0.1];
+        assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
+        snap.samples = vec![0.1, 0.2];
+        snap.pos = 2;
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+        snap.pos = 0;
+        snap.samples = vec![f32::NAN, 0.2];
         assert_eq!(snap.validate(), Err(SnapshotError::NonFinite));
     }
 
@@ -276,6 +302,17 @@ mod tests {
             capacity: 3,
             window: vec![],
             sum: 1.0,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+    }
+
+    #[test]
+    fn sma_snapshot_rejects_wildly_inconsistent_sum() {
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: 1,
+            window: vec![1.0],
+            sum: 100.0,
         };
         assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
     }
