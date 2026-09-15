@@ -6,6 +6,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+Crate version **0.5.0**.
+
+### Added
+
+- Caller-owned buffer reuse for the hot batch output paths:
+  `compute_surprise_sequence_into` and `compute_shannon_entropy_into`.
+  The existing allocating functions delegate to these cores and remain
+  behaviorally identical. Buffer length, overwrite, capacity retention, and
+  aliasing are documented on the new APIs and in the README.
+  `surprise_sequence_len` is the output-length contract for surprise sequences.
+
+### Breaking
+
+- The prelude glob now also exports `compute_surprise_sequence_into`,
+  `compute_shannon_entropy_into`, and `surprise_sequence_len`. Downstream
+  `use kinetic_signals::prelude::*` combined with another glob that already
+  defines those names becomes ambiguous; qualify the path or use explicit
+  imports. See "Upgrading from v0.4.x" in the README.
+
 ### Removed
 
 - Dropped the Qodana GitHub Actions workflow and `QODANA_TOKEN` / `QODANA_ENDPOINT` usage after membership expired.

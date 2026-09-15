@@ -2,8 +2,9 @@
 
 use kinetic_signals::{
     EMA, SMA, VolEstimator, ZScore, compute_hawkes, compute_hawkes_streaming, compute_hurst,
-    compute_shannon_entropy, compute_signal_stats, compute_surprise, compute_surprise_sequence,
-    detect_anomaly, hawkes::HawkesParams, surprise::SurpriseParams,
+    compute_shannon_entropy, compute_shannon_entropy_into, compute_signal_stats, compute_surprise,
+    compute_surprise_sequence, compute_surprise_sequence_into, detect_anomaly,
+    hawkes::HawkesParams, surprise::SurpriseParams, surprise_sequence_len,
 };
 
 fn lcg_next(state: &mut u64) -> u64 {
@@ -19,7 +20,7 @@ fn pseudo_random_f64(state: &mut u64) -> f64 {
 }
 
 fn main() {
-    println!("=== Kinetic Signals Demo v0.4.0 ===\n");
+    println!("=== Kinetic Signals Demo v0.5.0 ===\n");
 
     demo_hurst();
     demo_hawkes();
@@ -173,7 +174,10 @@ fn demo_surprise_sequence() {
 
     // Calm steps + one large jump + one large drop; tiny post-drop move stays sub-threshold
     let series = vec![100.0, 100.5, 101.0, 150.0, 148.5, 50.0, 50.05];
-    let results = compute_surprise_sequence(&series, &params);
+    let allocated = compute_surprise_sequence(&series, &params);
+    let mut results = Vec::with_capacity(surprise_sequence_len(series.len()));
+    compute_surprise_sequence_into(&series, &params, &mut results);
+    assert_eq!(allocated.len(), results.len());
 
     let mut anomaly_count = 0usize;
     let mut max_surprise = 0.0_f64;
@@ -199,10 +203,11 @@ fn demo_surprise_sequence() {
     }
 
     println!(
-        "Summary: transitions={}, anomalies={}, max_surprise={:.3}",
+        "Summary: transitions={}, anomalies={}, max_surprise={:.3} (into buffer cap={})",
         results.len(),
         anomaly_count,
-        max_surprise
+        max_surprise,
+        results.capacity()
     );
     println!();
 }
@@ -229,19 +234,28 @@ fn demo_volatility() {
 fn demo_entropy() {
     println!("--- Shannon Entropy (Complexity) ---");
 
+    let mut histogram = Vec::with_capacity(10);
     let low_entropy = vec![1.0, 1.0, 1.1, 1.0, 0.9, 1.0];
     let res1 = compute_shannon_entropy(&low_entropy, 10);
+    let res1_into = compute_shannon_entropy_into(&low_entropy, 10, &mut histogram);
+    assert_eq!(res1.shannon, res1_into.shannon);
     println!(
-        "Low complexity: H={:.3}, relative={:.3}, bins={}",
-        res1.shannon, res1.relative, res1.bin_count
+        "Low complexity: H={:.3}, relative={:.3}, bins={} (histogram slots={})",
+        res1.shannon,
+        res1.relative,
+        res1.bin_count,
+        histogram.len()
     );
 
     let mut rng = 0x0bad_f00d_dead_beef_u64;
     let high_entropy: Vec<f64> = (0..100).map(|_| pseudo_random_f64(&mut rng)).collect();
-    let res2 = compute_shannon_entropy(&high_entropy, 10);
+    let res2 = compute_shannon_entropy_into(&high_entropy, 10, &mut histogram);
     println!(
-        "High complexity: H={:.3}, relative={:.3}, bins={}",
-        res2.shannon, res2.relative, res2.bin_count
+        "High complexity: H={:.3}, relative={:.3}, bins={} (reused cap={})",
+        res2.shannon,
+        res2.relative,
+        res2.bin_count,
+        histogram.capacity()
     );
     println!();
 }
