@@ -16,12 +16,14 @@ publish = ["crates-io"]
 include = ["Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE-APACHE-2.0", "LICENSE-MIT", "src/**", "examples/**"]
 
 [dependencies]
+serde = { version = "1", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 serde_json = "1"
 
 [features]
 default = []
+serde = ["dep:serde"]
 
 [profile.release]
 opt-level = 3

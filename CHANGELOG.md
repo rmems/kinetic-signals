@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- Versioned `snapshot` / `restore` / `from_snapshot` for `VolEstimator`, `EMA`, and `SMA`, with `SnapshotError` validation (schema version, capacity, length, non-finite values) that does not mutate the destination on failure.
+- Optional `serde` feature for snapshot `Serialize` / `Deserialize`. Default and `--no-default-features` builds stay zero-dependency.
+- Replay fixture `tests/fixtures/snapshot_replay.json` covering a wrapped, non-empty `VolEstimator` window plus SMA/EMA A+B vs snapshot/restore.
+
 ### Removed
 
 - Dropped the Qodana GitHub Actions workflow and `QODANA_TOKEN` / `QODANA_ENDPOINT` usage after membership expired.

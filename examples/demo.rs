@@ -223,6 +223,16 @@ fn demo_volatility() {
         5,
         estimator.len()
     );
+
+    let snap = estimator.snapshot();
+    let mut resumed = VolEstimator::from_snapshot(&snap).expect("valid snapshot");
+    resumed.push(0.02);
+    estimator.push(0.02);
+    println!(
+        "After snapshot/restore + one push: continuous_rms={:.4} restored_rms={:.4}",
+        estimator.rms(),
+        resumed.rms()
+    );
     println!();
 }
 

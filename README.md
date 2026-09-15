@@ -9,7 +9,7 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 
 ## Features
 
-- **Zero runtime dependencies** - The crate is self-contained; consuming applications own observability integrations
+- **Zero required runtime dependencies** - The crate is self-contained by default; an optional `serde` feature serializes snapshots. Consuming applications own observability integrations
 - **Hurst Exponent** - Detects long-term memory and persistence in time-series data
 - **Hawkes Process** - Models self-exciting event clusters in point-process streams
 - **Surprise** - Detects anomalous transition magnitudes via normalized log-ratio z-scores
@@ -17,6 +17,7 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 - **Shannon Entropy** - Measures signal complexity and information density
 - **Indicators** - Moving averages (EMA, SMA) and Z-score tracking
 - **Signal Stats** - High-order moments (Skewness, Kurtosis)
+- **Snapshot / restore** - Versioned checkpoints for `VolEstimator`, `EMA`, and `SMA`
 
 ## Installation
 
@@ -71,6 +72,11 @@ let mut vol = VolEstimator::new(64);
 vol.push(0.01);
 vol.push(0.02);
 println!("RMS vol = {:.4}", vol.rms());
+
+// Snapshot / restore — checkpoint a rolling window and resume
+let snap = vol.snapshot();
+let mut resumed = VolEstimator::from_snapshot(&snap).expect("valid snapshot");
+resumed.push(0.015);
 ```
 
 ### Demo
@@ -128,6 +134,24 @@ docker run --rm kinetic-signals
 ### Numeric types
 
 Most APIs use `f64`. `compute_hurst` and the surprise helpers are generic and support `f32` and `f64`. `VolEstimator` consumes `f32` absolute log-returns and computes rolling RMS volatility.
+
+### Snapshot and restore
+
+Stateful streaming estimators (`VolEstimator`, `EMA`, `SMA`) expose
+`snapshot`, `restore`, and `from_snapshot`. Snapshots carry explicit
+`schema_version` (`SNAPSHOT_SCHEMA_VERSION`, currently `1`). Restore
+validates window sizes, sample counts, and finiteness, and leaves the
+destination unchanged on failure (`SnapshotError`).
+
+Processing segment A, snapshotting, restoring, then segment B matches
+processing A+B continuously within `RESTORE_OUTPUT_TOLERANCE` (`1e-6`).
+
+JSON (de)serialization of snapshot structs is available behind the optional
+`serde` feature:
+
+```toml
+kinetic-signals = { version = "0.4", features = ["serde"] }
+```
 
 ## Performance
 
@@ -187,8 +211,9 @@ for that stage:
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
 or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html);
-the Cargo feature names in `[features]` (there are currently no optional crate
-feature flags), and every
+the Cargo feature names in `[features]` (optional `serde` gates
+`Serialize`/`Deserialize` on snapshot types; the default build stays
+zero-dependency), and every
 **existing** trait implementation on a public type (e.g. `Default` for
 `HawkesParams`, `Clone` for the result structs) — removing one breaks
 downstream code that relies on it, the same as removing a function. The crate
