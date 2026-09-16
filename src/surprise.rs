@@ -347,6 +347,7 @@ mod tests {
         assert_allocating_matches_into(&[1.0], &params);
         assert_allocating_matches_into(&[100.0, 101.0], &params);
         assert_allocating_matches_into(&[100.0, 100.5, 100.2, 100.8, 100.4], &params);
+        assert_allocating_matches_into(&[100.0, f64::NAN, 101.0], &params);
     }
 
     #[test]

@@ -68,9 +68,10 @@ pub fn compute_shannon_entropy(data: &[f64], bins: usize) -> EntropyResult {
 ///
 /// # Buffer length and overwrite
 ///
-/// - Degenerate inputs (`data.len() < 2`, `bins == 0`, or a constant series)
-///   **clear** `histogram` (`len == 0`) and return the same result as
-///   [`compute_shannon_entropy`]. Capacity is retained.
+/// - Degenerate inputs (`data.len() < 2`, `bins == 0`, a non-finite sample,
+///   an overflowing min–max range, or a constant series) **clear** `histogram`
+///   (`len == 0`) and return the same result as [`compute_shannon_entropy`].
+///   Capacity is retained.
 /// - Otherwise `histogram` is resized to `bins` if needed, **zeroed**, then
 ///   overwritten with occupancy counts. After return, `histogram.len() == bins`
 ///   and `histogram[i]` is the count for bin `i`.
@@ -199,13 +200,15 @@ mod tests {
             (&[1.0, 2.0], 2),
             (&[1.0, 2.0, 3.0, 4.0], 4),
             (&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], 4),
+            (&[1.0, f64::NAN, 2.0], 4),
+            (&[f64::MAX, f64::MIN], 4),
         ];
         for &(data, bins) in cases {
             let allocated = compute_shannon_entropy(data, bins);
             let reused = compute_shannon_entropy_into(data, bins, &mut histogram);
             assert_entropy_eq(&allocated, &reused);
-            if data.len() < 2 || bins == 0 || data.iter().all(|&x| x == data[0]) {
-                assert!(histogram.is_empty());
+            if histogram.is_empty() {
+                assert!(allocated.bin_count <= 1);
             } else {
                 assert_eq!(histogram.len(), bins);
                 assert_eq!(histogram.iter().sum::<usize>(), data.len());
