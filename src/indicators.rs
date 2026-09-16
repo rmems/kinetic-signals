@@ -447,7 +447,7 @@ mod tests {
         let mean = sma.update(-f64::MAX);
         assert!(mean.is_finite());
         assert_eq!(mean, 0.0);
-        let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
+        let mut restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
         assert_eq!(restored.window, sma.window);
         assert_eq!(restored.sum, sma.sum);
         assert_eq!(restored.update(1.0), sma.update(1.0));
