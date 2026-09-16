@@ -7,6 +7,10 @@
 //! absolute z-score of the observed log-ratio relative to an expected drift,
 //! scaled by the per-step standard deviation.
 //!
+//! [`compute_surprise_sequence`] / [`compute_surprise_sequence_into`] score
+//! every consecutive pair. The allocating function is a thin wrapper around
+//! the `*_into` core so telemetry loops can reuse a caller-owned `Vec`.
+//!
 //! This is a generic signal-processing primitive: it makes no financial-domain
 //! assumptions. It can be applied to any strictly positive signal (sensor
 //! magnitudes, firing rates, power readings, asset prices, etc.).
@@ -140,11 +144,23 @@ where
     }
 }
 
+/// Number of consecutive transitions (and therefore output slots) in a
+/// surprise sequence of `n` samples.
+///
+/// This is `n.saturating_sub(1)`: empty and single-sample inputs produce no
+/// transitions.
+pub fn surprise_sequence_len(n: usize) -> usize {
+    n.saturating_sub(1)
+}
+
 /// Compute surprise scores for every consecutive transition in `values`.
+///
+/// Allocates a fresh output `Vec`. Prefer [`compute_surprise_sequence_into`]
+/// when a caller-owned buffer can be reused across windows.
 ///
 /// Each pair is evaluated independently: a non-finite or non-positive sample
 /// zeroes that step without dropping the sequence length
-/// (`values.len().saturating_sub(1)`).
+/// ([`surprise_sequence_len`] applied to `values.len()`).
 pub fn compute_surprise_sequence<T>(
     values: &[T],
     params: &SurpriseParams<T>,
@@ -152,15 +168,68 @@ pub fn compute_surprise_sequence<T>(
 where
     T: Real,
 {
-    if values.len() < 2 {
-        return Vec::new();
-    }
+    let mut out = Vec::with_capacity(surprise_sequence_len(values.len()));
+    compute_surprise_sequence_into(values, params, &mut out);
+    out
+}
 
-    let mut results = Vec::with_capacity(values.len() - 1);
-    for i in 1..values.len() {
-        results.push(compute_surprise(values[i], values[i - 1], params));
+/// Write surprise scores for every consecutive transition into `out`.
+///
+/// This is the hot output path for batch surprise: high-frequency telemetry
+/// loops can keep one `Vec` and reuse it for each window instead of allocating
+/// on every call.
+///
+/// # Buffer length and overwrite
+///
+/// - `out` is resized to `surprise_sequence_len(values.len())`. Growing
+///   past the current **capacity** may allocate; shrinking only truncates.
+/// - Every slot is then **overwritten** with the result for `values[i-1]` →
+///   `values[i]`. This function never calls `shrink_to_fit`.
+/// - If `out.capacity() >= surprise_sequence_len(values.len())` before the
+///   call, **no output allocation** is performed.
+///
+/// # Aliasing
+///
+/// `values` is borrowed immutably and `out` is borrowed mutably for the
+/// duration of the call. In safe Rust they cannot alias: the input element
+/// type `T` (`f32` / `f64`) is distinct from [`SurpriseResult<T>`]. Results
+/// are written only to `out`; `values` is never mutated.
+///
+/// # Example
+///
+/// ```rust
+/// use kinetic_signals::{SurpriseParams, compute_surprise_sequence_into};
+///
+/// let params = SurpriseParams::default();
+/// let window = [100.0, 100.5, 101.0, 100.8];
+/// let mut out = Vec::with_capacity(window.len() - 1);
+/// compute_surprise_sequence_into(&window, &params, &mut out);
+/// assert_eq!(out.len(), 3);
+///
+/// // Next window: same buffer, no output allocation when capacity is enough.
+/// let next = [100.8, 101.2, 150.0];
+/// compute_surprise_sequence_into(&next, &params, &mut out);
+/// assert_eq!(out.len(), 2);
+/// ```
+pub fn compute_surprise_sequence_into<T>(
+    values: &[T],
+    params: &SurpriseParams<T>,
+    out: &mut Vec<SurpriseResult<T>>,
+) where
+    T: Real,
+{
+    let n = surprise_sequence_len(values.len());
+    if out.len() != n {
+        out.resize_with(n, || SurpriseResult {
+            surprise: T::zero(),
+            log_return: T::zero(),
+            expected_return: T::zero(),
+            z_score: T::zero(),
+        });
     }
-    results
+    for (slot, pair) in out.iter_mut().zip(values.windows(2)) {
+        *slot = compute_surprise(pair[1], pair[0], params);
+    }
 }
 
 /// Return `true` if the result's surprise exceeds the configured threshold.
@@ -246,6 +315,76 @@ mod tests {
         let params = SurpriseParams::default();
         assert!(compute_surprise_sequence(&[], &params).is_empty());
         assert!(compute_surprise_sequence(&[1.0], &params).is_empty());
+    }
+
+    fn assert_results_match(left: &[SurpriseResult], right: &[SurpriseResult]) {
+        assert_eq!(left.len(), right.len());
+        for (a, b) in left.iter().zip(right) {
+            assert_eq!(a.surprise, b.surprise);
+            assert_eq!(a.log_return, b.log_return);
+            assert_eq!(a.expected_return, b.expected_return);
+            assert_eq!(a.z_score, b.z_score);
+        }
+    }
+
+    fn assert_allocating_matches_into(values: &[f64], params: &SurpriseParams) {
+        let allocated = compute_surprise_sequence(values, params);
+        let mut reused = vec![SurpriseResult {
+            surprise: f64::NAN,
+            log_return: f64::NAN,
+            expected_return: f64::NAN,
+            z_score: f64::NAN,
+        }];
+        compute_surprise_sequence_into(values, params, &mut reused);
+        assert_eq!(reused.len(), surprise_sequence_len(values.len()));
+        assert_results_match(&allocated, &reused);
+    }
+
+    #[test]
+    fn test_surprise_sequence_into_matches_allocating() {
+        let params = SurpriseParams::default();
+        assert_allocating_matches_into(&[], &params);
+        assert_allocating_matches_into(&[1.0], &params);
+        assert_allocating_matches_into(&[100.0, 101.0], &params);
+        assert_allocating_matches_into(&[100.0, 100.5, 100.2, 100.8, 100.4], &params);
+        assert_allocating_matches_into(&[100.0, f64::NAN, 101.0], &params);
+    }
+
+    #[test]
+    fn test_surprise_sequence_into_resizes_and_keeps_capacity() {
+        let params = SurpriseParams::default();
+        let mut out: Vec<SurpriseResult> = Vec::new();
+
+        compute_surprise_sequence_into(&[], &params, &mut out);
+        assert!(out.is_empty());
+
+        compute_surprise_sequence_into(&[42.0], &params, &mut out);
+        assert!(out.is_empty());
+
+        let exact = [100.0, 110.0];
+        compute_surprise_sequence_into(&exact, &params, &mut out);
+        assert_eq!(out.len(), 1);
+        let cap_after_exact = out.capacity();
+        assert!(cap_after_exact >= 1);
+
+        let multi = [100.0, 100.5, 101.0, 150.0, 149.0];
+        compute_surprise_sequence_into(&multi, &params, &mut out);
+        assert_eq!(out.len(), 4);
+        let cap_after_multi = out.capacity();
+        assert!(cap_after_multi >= cap_after_exact);
+        assert!(cap_after_multi >= 4);
+
+        compute_surprise_sequence_into(&exact, &params, &mut out);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out.capacity(), cap_after_multi);
+    }
+
+    #[test]
+    fn test_surprise_sequence_len() {
+        assert_eq!(surprise_sequence_len(0), 0);
+        assert_eq!(surprise_sequence_len(1), 0);
+        assert_eq!(surprise_sequence_len(2), 1);
+        assert_eq!(surprise_sequence_len(8), 7);
     }
 
     #[test]

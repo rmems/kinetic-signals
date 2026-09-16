@@ -73,6 +73,40 @@ vol.push(0.02);
 println!("RMS vol = {:.4}", vol.rms());
 ```
 
+### Buffer reuse (hot output paths)
+
+High-frequency telemetry loops can keep a caller-owned `Vec` and pass it to
+the `*_into` APIs instead of allocating a new output on every window.
+
+| Path | Allocating wrapper | Reuse API | Output length |
+|------|--------------------|-----------|---------------|
+| Surprise sequence | `compute_surprise_sequence` | `compute_surprise_sequence_into` | `surprise_sequence_len(n)` = `n.saturating_sub(1)` |
+| Shannon entropy histogram | `compute_shannon_entropy` | `compute_shannon_entropy_into` | `bins` on a non-degenerate input; `0` otherwise |
+
+Both wrappers delegate to the `*_into` core, so results are identical.
+
+**Overwrite / resize:** each `_into` call **resizes** the buffer to the
+current window's output length (entropy **clears** on degenerate inputs),
+then **overwrites** every slot. Capacity is never shrunk. A buffer whose
+`capacity()` is already large enough performs **no output allocation** in
+steady state.
+
+**Aliasing:** the input slice and output `Vec` use different element types
+(`f64`/`f32` vs `SurpriseResult`, or `f64` vs `usize`), so they cannot alias
+in safe Rust. Inputs are read-only; only the caller buffer is written.
+
+```rust
+use kinetic_signals::{
+    SurpriseParams, compute_surprise_sequence_into, surprise_sequence_len,
+};
+
+let params = SurpriseParams::default();
+let window = [100.0, 100.5, 101.0, 100.8];
+let mut out = Vec::with_capacity(surprise_sequence_len(window.len()));
+compute_surprise_sequence_into(&window, &params, &mut out);
+assert_eq!(out.len(), 3);
+```
+
 ### Demo
 
 Run the included demo:
@@ -164,6 +198,22 @@ Typical execution times (Ryzen 9 9950X):
 - Hurst (100 samples): ~50μs
 - Hawkes (10 events): ~5μs
 - Surprise: ~100ns
+
+## Upgrading from v0.4.x
+
+v0.5.0 adds buffer-reuse APIs. Existing allocating functions keep their
+signatures. The new names are also exported by `prelude`:
+
+| New in v0.5.0 | Role |
+|---------------|------|
+| `compute_surprise_sequence_into` | Reuse a caller `Vec<SurpriseResult>` |
+| `compute_shannon_entropy_into` | Reuse a caller histogram `Vec<usize>` |
+| `surprise_sequence_len` | Output length: `n.saturating_sub(1)` |
+
+If `use kinetic_signals::prelude::*;` is combined with another glob import
+that already defines one of those names, the compiler will report an
+ambiguous glob re-export. Replace the colliding glob with an explicit import,
+or qualify the kinetic-signals item (`kinetic_signals::compute_surprise_sequence_into`).
 
 ## Upgrading from v0.3.x
 
