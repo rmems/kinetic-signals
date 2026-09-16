@@ -28,13 +28,13 @@ Before the first crates.io publication, use the repository dependency:
 kinetic-signals = { git = "https://github.com/rmems/kinetic-signals" }
 ```
 
-After `kinetic-signals 0.4.0` is published and verified on
+After `kinetic-signals 0.5.0` is published and verified on
 [crates.io](https://crates.io/crates/kinetic-signals), use the registry
 dependency:
 
 ```toml
 [dependencies]
-kinetic-signals = "0.4"
+kinetic-signals = "0.5"
 ```
 
 See the [changelog](CHANGELOG.md#release-checklist) for the release history

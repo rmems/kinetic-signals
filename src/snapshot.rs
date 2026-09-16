@@ -228,6 +228,11 @@ pub struct SMASnapshot {
 
 impl SMASnapshot {
     /// Check version, capacity, length, finiteness, and Welford-derived sum.
+    ///
+    /// The stored `sum` is compared against the canonical recomputation with
+    /// a tolerance scaled by magnitude and window length (base
+    /// [`RESTORE_OUTPUT_TOLERANCE`], so benign rounding drift validates
+    /// while genuine inconsistencies are rejected.
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
         if self.window.len() > self.capacity {
@@ -237,7 +242,14 @@ impl SMASnapshot {
             require_finite_f64(x)?;
         }
         require_finite_f64(self.sum)?;
-        if self.sum != sma_canonical_sum(&self.window) {
+        // Bit-exact comparison is too strict: the stored Welford-derived sum
+        // and `sma_canonical_sum` (stable mean times count) can differ by
+        // benign rounding drift. Compare with a tolerance scaled by magnitude
+        // and window length instead, still rejecting genuine inconsistencies.
+        let canonical = sma_canonical_sum(&self.window);
+        let scale = self.sum.abs().max(canonical.abs()).max(1.0);
+        let tolerance = RESTORE_OUTPUT_TOLERANCE * scale * self.window.len().max(1) as f64;
+        if (self.sum - canonical).abs() > tolerance {
             return Err(SnapshotError::InconsistentState);
         }
         Ok(())
@@ -392,5 +404,22 @@ mod tests {
             sum: 600.0,
         };
         assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+    }
+
+    #[test]
+    fn sma_snapshot_accepts_sum_within_scaled_tolerance() {
+        // Benign rounding drift: the stored sum differs from the canonical
+        // recomputation by far less than the scaled tolerance. Bit-exact
+        // comparison would wrongly reject this snapshot.
+        let window = vec![0.1, 0.2, 0.3];
+        let canonical = sma_canonical_sum(&window);
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: 3,
+            window,
+            sum: canonical + 1e-9,
+        };
+        assert_ne!(snap.sum, canonical);
+        assert_eq!(snap.validate(), Ok(()));
     }
 }
