@@ -1,0 +1,11 @@
+src/surprise.rs
+  40b6c5e347ad34f2 161-163
+src/entropy.rs
+  55a87b6f49a9487f 279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e056f28a1d46349241d72969ea36cded72ebe5db",
+  "prompts": {}
+}
