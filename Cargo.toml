@@ -25,6 +25,10 @@ serde_json = "1"
 default = []
 serde = ["dep:serde"]
 
+[[bench]]
+name = "output_reuse"
+harness = false
+
 [profile.release]
 opt-level = 3
 lto = true

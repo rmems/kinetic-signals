@@ -9,13 +9,15 @@
 //! - [`SMA`] — fixed-window simple moving average
 //! - [`ZScore`] — z-score (standard-score) normalization helper
 
+use crate::numeric::{finite_or_zero, stable_mean};
 use crate::snapshot::{EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError};
 
 /// Exponential moving average (EMA) for streaming data.
 ///
 /// Smoothing factor \(\alpha = 2 / (\text{period} + 1)\). The first
 /// [`update`](EMA::update) seeds the average; subsequent calls blend the new
-/// sample with the previous value.
+/// sample with the previous value. Non-finite samples are ignored so a single
+/// `NaN`/`Inf` tick cannot poison the estimator.
 ///
 /// # Example
 ///
@@ -49,7 +51,13 @@ impl EMA {
     }
 
     /// Incorporate `new_value` and return the updated EMA.
+    ///
+    /// Non-finite `new_value` leaves state unchanged and returns the current
+    /// value (`0.0` before the first finite sample).
     pub fn update(&mut self, new_value: f64) -> f64 {
+        if !new_value.is_finite() {
+            return self.value;
+        }
         if !self.initialized {
             self.value = new_value;
             self.initialized = true;
@@ -113,12 +121,14 @@ pub struct ZScore {
 }
 
 impl ZScore {
-    /// Return \((value - mean) / std_dev\), or `0.0` if `std_dev` is near zero.
+    /// Return \((value - mean) / std_dev\), or `0.0` if `std_dev` is near
+    /// zero, non-positive, any argument is non-finite, or the quotient
+    /// overflows.
     pub fn compute(value: f64, mean: f64, std_dev: f64) -> f64 {
-        if std_dev > 1e-12 {
-            (value - mean) / std_dev
-        } else {
+        if !value.is_finite() || !mean.is_finite() || !std_dev.is_finite() || std_dev <= 1e-12 {
             0.0
+        } else {
+            finite_or_zero((value - mean) / std_dev)
         }
     }
 }
@@ -126,7 +136,9 @@ impl ZScore {
 /// Simple moving average (SMA) over a fixed-capacity window.
 ///
 /// When the window is full, the oldest sample is dropped on each update so
-/// memory stays O(capacity).
+/// memory stays O(capacity). The running sum is recomputed from the window
+/// after each accepted sample so add/remove drift cannot accumulate.
+/// Non-finite samples are ignored.
 ///
 /// # Example
 ///
@@ -151,6 +163,9 @@ pub struct SMA {
 
 impl SMA {
     /// Create an SMA that retains at most `capacity` samples.
+    ///
+    /// `capacity == 0` is retained for compatibility: construction succeeds
+    /// and [`update`](SMA::update) is a no-op that returns `0.0`.
     pub fn new(capacity: usize) -> Self {
         Self {
             window: Vec::with_capacity(capacity),
@@ -160,13 +175,31 @@ impl SMA {
     }
 
     /// Incorporate `new_value` and return the updated window mean.
+    ///
+    /// Non-finite `new_value` leaves the window unchanged and returns the
+    /// current mean (`0.0` when empty).
     pub fn update(&mut self, new_value: f64) -> f64 {
+        if self.capacity == 0 {
+            return 0.0;
+        }
+        if !new_value.is_finite() {
+            return if self.window.is_empty() {
+                0.0
+            } else {
+                stable_mean(&self.window).map_or(0.0, finite_or_zero)
+            };
+        }
         if self.window.len() == self.capacity {
-            self.sum -= self.window.remove(0);
+            self.window.remove(0);
         }
         self.window.push(new_value);
-        self.sum += new_value;
-        self.sum / self.window.len() as f64
+        let Some(mean) = stable_mean(&self.window) else {
+            self.sum = 0.0;
+            return 0.0;
+        };
+        let n = self.window.len() as f64;
+        self.sum = finite_or_zero(mean * n);
+        mean
     }
 
     /// Capture SMA window, capacity, and running sum for later [`Self::restore`].
@@ -347,5 +380,62 @@ mod tests {
         assert_eq!(sma.restore(&bad), Err(SnapshotError::InvalidLength));
         assert_eq!(sma.window, before.window);
         assert_eq!(sma.sum, before.sum);
+    }
+
+    #[test]
+    fn test_zscore_nonfinite_is_zero() {
+        assert_eq!(ZScore::compute(f64::NAN, 0.0, 1.0), 0.0);
+        assert_eq!(ZScore::compute(1.0, f64::INFINITY, 1.0), 0.0);
+        assert_eq!(ZScore::compute(1.0, 0.0, f64::NAN), 0.0);
+        assert_eq!(ZScore::compute(f64::MAX, f64::MIN, 1.0), 0.0);
+    }
+
+    #[test]
+    fn test_ema_skips_nonfinite() {
+        let mut ema = EMA::new(3);
+        assert_eq!(ema.update(f64::NAN), 0.0);
+        assert!(!ema.initialized);
+        assert_eq!(ema.update(10.0), 10.0);
+        let kept = ema.value;
+        assert_eq!(ema.update(f64::INFINITY), kept);
+        assert_eq!(ema.value, kept);
+    }
+
+    #[test]
+    fn test_sma_skips_nonfinite_and_matches_window_mean() {
+        let mut sma = SMA::new(3);
+        sma.update(1.0);
+        sma.update(2.0);
+        let mean = sma.update(3.0);
+        assert_eq!(mean, 2.0);
+        assert_eq!(sma.update(f64::NAN), 2.0);
+        assert_eq!(sma.window.len(), 3);
+        assert_eq!(sma.update(4.0), 3.0);
+    }
+
+    #[test]
+    fn test_sma_zero_capacity_is_noop() {
+        let mut sma = SMA::new(0);
+        assert_eq!(sma.update(1.0), 0.0);
+        assert!(sma.window.is_empty());
+        assert_eq!(sma.update(f64::NAN), 0.0);
+    }
+
+    #[test]
+    fn test_sma_extreme_finite_is_finite() {
+        let mut sma = SMA::new(2);
+        sma.update(1e12);
+        let mean = sma.update(1e12 + 2.0);
+        assert!(mean.is_finite());
+        assert!((mean - (1e12 + 1.0)).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_sma_opposite_extremes_mean_is_finite() {
+        let mut sma = SMA::new(2);
+        sma.update(f64::MAX);
+        let mean = sma.update(-f64::MAX);
+        assert!(mean.is_finite());
+        assert_eq!(mean, 0.0);
     }
 }

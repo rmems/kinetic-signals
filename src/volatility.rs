@@ -9,7 +9,9 @@ use crate::snapshot::{
 /// Rolling RMS volatility estimator over a fixed window.
 ///
 /// Stores absolute log-returns in a circular buffer and computes
-/// `sqrt(mean(r²))` over the window. Clamped to [0, 1].
+/// `sqrt(mean(r²))` over the window. Clamped to [0, 1]. Non-finite pushes
+/// are ignored. Squares are accumulated in `f64` so extreme finite `f32`
+/// samples do not overflow before the clamp.
 ///
 /// # Example
 /// ```rust
@@ -46,7 +48,12 @@ impl VolEstimator {
     }
 
     /// Push one absolute log-return into the ring buffer.
+    ///
+    /// Non-finite values are ignored so a `NaN`/`Inf` tick cannot poison RMS.
     pub fn push(&mut self, abs_log_return: f32) {
+        if !abs_log_return.is_finite() {
+            return;
+        }
         self.buf[self.pos] = abs_log_return;
         self.pos += 1;
         if self.pos >= self.cap {
@@ -61,8 +68,14 @@ impl VolEstimator {
         if n == 0 {
             return 0.0;
         }
-        let sum_sq: f32 = self.buf[..n].iter().map(|r| r * r).sum();
-        (sum_sq / n as f32).sqrt().clamp(0.0, 1.0)
+        let sum_sq: f64 = self.buf[..n]
+            .iter()
+            .map(|&r| {
+                let x = f64::from(r);
+                x * x
+            })
+            .sum();
+        (sum_sq / n as f64).sqrt().clamp(0.0, 1.0) as f32
     }
 
     /// Number of samples currently in the buffer.
@@ -145,7 +158,6 @@ mod tests {
         v.push(0.1);
         v.push(0.2);
         v.push(0.3);
-        // RMS([0.1, 0.2, 0.3]) = sqrt((0.01+0.04+0.09)/3) ≈ 0.2160
         assert!((v.rms() - 0.2160).abs() < 0.01);
     }
 
@@ -226,5 +238,38 @@ mod tests {
         assert_eq!(est.restore(&bad), Err(SnapshotError::NonFinite));
         assert_eq!(est.len(), before_len);
         assert_eq!(est.rms(), before_rms);
+    }
+
+    #[test]
+    fn test_rms_skips_nonfinite() {
+        let mut v = VolEstimator::new(3);
+        v.push(0.1);
+        v.push(f32::NAN);
+        v.push(f32::INFINITY);
+        v.push(0.2);
+        assert_eq!(v.len(), 2);
+        let rms = v.rms();
+        assert!(rms.is_finite());
+        let expected = ((0.1f64.powi(2) + 0.2f64.powi(2)) / 2.0).sqrt() as f32;
+        assert!((rms - expected).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_rms_extreme_finite_clamped() {
+        let mut v = VolEstimator::new(2);
+        v.push(1e20);
+        v.push(1e20);
+        let rms = v.rms();
+        assert!(rms.is_finite());
+        assert_eq!(rms, 1.0);
+    }
+
+    #[test]
+    fn test_rms_constant_zero() {
+        let mut v = VolEstimator::new(4);
+        for _ in 0..4 {
+            v.push(0.0);
+        }
+        assert_eq!(v.rms(), 0.0);
     }
 }

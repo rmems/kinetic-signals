@@ -79,6 +79,40 @@ let mut resumed = VolEstimator::from_snapshot(&snap).expect("valid snapshot");
 resumed.push(0.015);
 ```
 
+### Buffer reuse (hot output paths)
+
+High-frequency telemetry loops can keep a caller-owned `Vec` and pass it to
+the `*_into` APIs instead of allocating a new output on every window.
+
+| Path | Allocating wrapper | Reuse API | Output length |
+|------|--------------------|-----------|---------------|
+| Surprise sequence | `compute_surprise_sequence` | `compute_surprise_sequence_into` | `surprise_sequence_len(n)` = `n.saturating_sub(1)` |
+| Shannon entropy histogram | `compute_shannon_entropy` | `compute_shannon_entropy_into` | `bins` on a non-degenerate input; `0` otherwise |
+
+Both wrappers delegate to the `*_into` core, so results are identical.
+
+**Overwrite / resize:** each `_into` call **resizes** the buffer to the
+current window's output length (entropy **clears** on degenerate inputs),
+then **overwrites** every slot. Capacity is never shrunk. A buffer whose
+`capacity()` is already large enough performs **no output allocation** in
+steady state.
+
+**Aliasing:** the input slice and output `Vec` use different element types
+(`f64`/`f32` vs `SurpriseResult`, or `f64` vs `usize`), so they cannot alias
+in safe Rust. Inputs are read-only; only the caller buffer is written.
+
+```rust
+use kinetic_signals::{
+    SurpriseParams, compute_surprise_sequence_into, surprise_sequence_len,
+};
+
+let params = SurpriseParams::default();
+let window = [100.0, 100.5, 101.0, 100.8];
+let mut out = Vec::with_capacity(surprise_sequence_len(window.len()));
+compute_surprise_sequence_into(&window, &params, &mut out);
+assert_eq!(out.len(), 3);
+```
+
 ### Demo
 
 Run the included demo:
@@ -155,6 +189,33 @@ kinetic-signals = { version = "0.5", features = ["serde"] }
 serde_json = "1"
 ```
 
+### Numeric input contract
+
+Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf`) and other ill-conditioned cases produce a documented finite sentinel rather than an accidental `NaN`. Intentionally undefined results (empty history, constant R/S, non-positive surprise samples, near-zero variance) use the same sentinels and are covered by tests.
+
+| API | Invalid / ill-conditioned input | Chosen behavior |
+|-----|---------------------------------|-----------------|
+| `compute_hurst` | `len < 32`, any non-finite sample, constant / near-constant windows, underdetermined log-log fit | `h = 0.5`, both persistence flags `false` |
+| `compute_hawkes` | empty history, any non-finite time or parameter, `mu < 0` / `alpha < 0` / `beta < 0`, overflowed excitation sum | `event_count = 0`, `intensity = μ` (or `0` if `μ` is non-finite), `avg_excitation = 0` |
+| `compute_hawkes` | negative inter-event gap (non-monotonic times) | empty-history sentinel (`event_count = 0`) |
+| `compute_hawkes_streaming` | backwards tick (`new_event_time < last_event_time`) | ignore the tick; keep `decay_sum`; intensity is `μ + α · decay_sum` |
+| `compute_hawkes_streaming` | non-finite time, `decay_sum`, or parameters | `(μ, decay_sum)` with non-finite fields replaced by `0`; finite decay history is preserved |
+| `compute_hawkes` + streaming | same finite monotone history, stream started at decay `0` | post-event `μ + α · decay_sum` matches batch intensity (pre-jump streaming return is `μ + α · decayed_sum`) |
+| `compute_surprise` / `compute_surprise_sequence` | non-finite or non-positive sample, non-finite params, `dt < 0` | zeroed result (`surprise = z_score = log_return = 0`); sequence length still `values.len() - 1` |
+| `compute_surprise` | `sigma ≤ 0` with valid positive samples | `z_score = surprise = 0`; `log_return` still reported |
+| `detect_anomaly` | non-finite surprise or threshold | `false` (not an anomaly) |
+| `compute_shannon_entropy` | `len < 2`, `bins == 0`, any non-finite sample, overflowed `max - min` range | zeroed result (`bin_count = 0`) |
+| `compute_shannon_entropy` | constant series (`max == min`) | `shannon = 0`, `bin_count = 1` |
+| `compute_signal_stats` | empty slice, any non-finite sample, or overflowing second moment | all zeros, `count = 0` |
+| `compute_signal_stats` | constant / near-zero variance | `skewness = kurtosis = 0` |
+| `VolEstimator::push` / `rms` | non-finite push; empty window | push ignored; empty `rms = 0`; output clamped to `[0, 1]` |
+| `EMA::update` / `SMA::update` | non-finite sample | state unchanged; current value returned (`0` if uninitialized / empty) |
+| `SMA::new` | `capacity == 0` | construction succeeds; `update` is a no-op returning `0.0` |
+| `VolEstimator::new` | `capacity == 0` | panic (`capacity must be > 0`) |
+| `ZScore::compute` | non-finite argument, `std_dev ≤ 1e-12`, or overflowing quotient | `0.0` |
+
+Shared-vector goldens are unchanged: the sentinels apply only to invalid or degenerate inputs, not to the finite fixture histories.
+
 ## Performance
 
 Built with aggressive optimizations for real-time inference:
@@ -166,13 +227,28 @@ Typical execution times (Ryzen 9 9950X):
 
 ## Upgrading from v0.4.x
 
-v0.5.0 adds snapshot/restore APIs. Existing estimator constructors, `push` /
-`update`, and batch functions are unchanged. Downstream crates that glob-import
-`kinetic_signals::prelude::*` should watch for name collisions with
-`SNAPSHOT_SCHEMA_VERSION`, `RESTORE_OUTPUT_TOLERANCE`, `SnapshotError`,
-`VolEstimatorSnapshot`, `EMASnapshot`, and `SMASnapshot`. Enable serde
-traits on snapshot types with `features = ["serde"]` (add a format crate
-such as `serde_json` separately).
+v0.5.0 adds buffer-reuse APIs and snapshot/restore APIs. Existing
+allocating functions, estimator constructors, `push` / `update`, and batch
+functions are unchanged.
+
+The new names are also exported by `prelude`:
+
+| New in v0.5.0 | Role |
+|---------------|------|
+| `compute_surprise_sequence_into` | Reuse a caller `Vec<SurpriseResult>` |
+| `compute_shannon_entropy_into` | Reuse a caller histogram `Vec<usize>` |
+| `surprise_sequence_len` | Output length: `n.saturating_sub(1)` |
+| `VolEstimatorSnapshot`, `EMASnapshot`, `SMASnapshot` | Versioned estimator snapshot structs |
+| `SNAPSHOT_SCHEMA_VERSION`, `RESTORE_OUTPUT_TOLERANCE` | Snapshot schema constants |
+| `SnapshotError` | Typed validation error on snapshot restore |
+
+If `use kinetic_signals::prelude::*;` is combined with another glob import
+that already defines one of those names, the compiler will report an
+ambiguous glob re-export. Replace the colliding glob with an explicit import,
+or qualify the kinetic-signals item (`kinetic_signals::compute_surprise_sequence_into`).
+
+Enable serde traits on snapshot types with `features = ["serde"]` (add a
+format crate such as `serde_json` separately).
 
 ## Upgrading from v0.3.x
 

@@ -6,11 +6,12 @@ WORKDIR /app
 # Copy manifests
 COPY Cargo.toml ./
 
-# Create dummy main to cache dependencies
-RUN mkdir src && \
+# Create dummy sources to cache the (empty) dependency graph
+RUN mkdir src benches && \
     echo "" > src/lib.rs && \
+    echo "fn main() {}" > benches/output_reuse.rs && \
     cargo build --release && \
-    rm -rf src target/release/.fingerprint/kinetic[-_]signals* \
+    rm -rf src benches target/release/.fingerprint/kinetic[-_]signals* \
            target/release/deps/libkinetic[-_]signals* \
            target/release/deps/kinetic[-_]signals*
 
@@ -18,6 +19,7 @@ RUN mkdir src && \
 COPY src ./src
 COPY examples ./examples
 COPY tests ./tests
+COPY benches ./benches
 
 # Build the example
 RUN cargo build --release --examples
