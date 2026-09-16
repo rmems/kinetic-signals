@@ -103,6 +103,19 @@ pub(crate) fn alloc_zeros_f32(len: usize) -> Result<Vec<f32>, SnapshotError> {
     Ok(buf)
 }
 
+fn try_reserve_f64(len: usize) -> Result<Vec<f64>, SnapshotError> {
+    let mut buf = Vec::new();
+    buf.try_reserve_exact(len)
+        .map_err(|_| SnapshotError::AllocationFailed)?;
+    Ok(buf)
+}
+
+pub(crate) fn clone_f64_slice(src: &[f64]) -> Result<Vec<f64>, SnapshotError> {
+    let mut buf = try_reserve_f64(src.len())?;
+    buf.extend_from_slice(src);
+    Ok(buf)
+}
+
 pub(crate) fn sma_canonical_sum(window: &[f64]) -> f64 {
     match stable_mean(window) {
         Some(mean) => finite_or_zero(mean * window.len() as f64),
@@ -335,5 +348,14 @@ mod tests {
             sum: 1.0,
         };
         assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
+    }
+
+    #[test]
+    fn clone_f64_slice_round_trips_and_maps_overflow_len() {
+        assert_eq!(clone_f64_slice(&[1.0, 2.0]).unwrap(), vec![1.0, 2.0]);
+        assert_eq!(
+            try_reserve_f64(usize::MAX),
+            Err(SnapshotError::AllocationFailed)
+        );
     }
 }

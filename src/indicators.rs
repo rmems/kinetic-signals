@@ -11,7 +11,8 @@
 
 use crate::numeric::{finite_or_zero, stable_mean};
 use crate::snapshot::{
-    EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError, sma_canonical_sum,
+    EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError, clone_f64_slice,
+    sma_canonical_sum,
 };
 
 /// Exponential moving average (EMA) for streaming data.
@@ -222,10 +223,15 @@ impl SMA {
     /// `sum` is reconstructed with the same Welford-derived total
     /// [`Self::update`] stores, so a snapshot that passed validation always
     /// restores to live-estimator state.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::SnapshotError`] when validation fails or the window
+    /// buffer cannot be allocated. `self` is not constructed.
     pub fn from_snapshot(snapshot: &SMASnapshot) -> Result<Self, SnapshotError> {
         snapshot.validate()?;
         Ok(Self {
-            window: snapshot.window.clone(),
+            window: clone_f64_slice(&snapshot.window)?,
             capacity: snapshot.capacity,
             sum: sma_canonical_sum(&snapshot.window),
         })
@@ -451,5 +457,17 @@ mod tests {
         assert_eq!(restored.window, sma.window);
         assert_eq!(restored.sum, sma.sum);
         assert_eq!(restored.update(1.0), sma.update(1.0));
+    }
+
+    #[test]
+    fn sma_snapshot_round_trips_welford_cancellation() {
+        let mut sma = SMA::new(3);
+        sma.update(1e16);
+        sma.update(2.0);
+        sma.update(-1e16);
+        let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
+        assert_eq!(restored.window, sma.window);
+        assert_eq!(restored.sum, sma.sum);
+        assert_eq!(restored.sum, 3.0);
     }
 }
