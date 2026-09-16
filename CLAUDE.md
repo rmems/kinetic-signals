@@ -26,8 +26,9 @@ CI commands must not use `--locked`, it fails on a fresh checkout with no lockfi
 
 - Domain-agnostic streaming signal-feature library: Hurst exponent, Hawkes process,
   surprise/anomaly detection, volatility, Shannon entropy, indicators (EMA/SMA/Z-score),
-  signal stats. Each feature is its own top-level module (`src/hurst.rs`, `src/hawkes.rs`,
-  etc.) with a crate-root re-export and a `prelude` glob re-export.
+  signal stats, and versioned snapshot/restore for stateful estimators. Each feature is
+  its own top-level module (`src/hurst.rs`, `src/hawkes.rs`, `src/snapshot.rs`, etc.)
+  with a crate-root re-export and a `prelude` glob re-export.
 - **Sealed generic-float trait** (`src/real.rs`, `mod real` — not `pub`): `compute_hurst`,
   `compute_surprise`, `compute_surprise_sequence`, `detect_anomaly` are generic over the
   crate-private `Real` trait, implemented only for `f32`/`f64`. This lets those functions
@@ -36,7 +37,7 @@ CI commands must not use `--locked`, it fails on a fresh checkout with no lockfi
   compile-time `Send + Sync` assertions in `src/lib.rs` (`_assert_send_sync`) only cover
   the concrete `f32`/`f64` instantiations, not an arbitrary caller-supplied generic `T`.
 - **Three public API surfaces**: crate root (`kinetic_signals::*`),
-  each `pub mod`, and `prelude` (glob re-export of the seven computation modules) are kept
+  each `pub mod`, and `prelude` (glob re-export of the computation modules) are kept
   in sync. Adding a new module item is usually non-breaking pre-1.0; adding
   a new trait impl or inherent method is not automatically safe (glob re-exports can create
   downstream ambiguity or ordinary API conflicts) — see the "Pre-1.0 SemVer / Stability

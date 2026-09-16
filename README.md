@@ -9,7 +9,7 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 
 ## Features
 
-- **Zero runtime dependencies** - The crate is self-contained; consuming applications own observability integrations
+- **Zero required runtime dependencies** - The crate is self-contained by default; an optional `serde` feature serializes snapshots. Consuming applications own observability integrations
 - **Hurst Exponent** - Detects long-term memory and persistence in time-series data
 - **Hawkes Process** - Models self-exciting event clusters in point-process streams
 - **Surprise** - Detects anomalous transition magnitudes via normalized log-ratio z-scores
@@ -17,6 +17,7 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 - **Shannon Entropy** - Measures signal complexity and information density
 - **Indicators** - Moving averages (EMA, SMA) and Z-score tracking
 - **Signal Stats** - High-order moments (Skewness, Kurtosis)
+- **Snapshot / restore** - Versioned checkpoints for `VolEstimator`, `EMA`, and `SMA`
 
 ## Installation
 
@@ -71,6 +72,11 @@ let mut vol = VolEstimator::new(64);
 vol.push(0.01);
 vol.push(0.02);
 println!("RMS vol = {:.4}", vol.rms());
+
+// Snapshot / restore — checkpoint a rolling window and resume
+let snap = vol.snapshot();
+let mut resumed = VolEstimator::from_snapshot(&snap).expect("valid snapshot");
+resumed.push(0.015);
 ```
 
 ### Buffer reuse (hot output paths)
@@ -163,6 +169,30 @@ docker run --rm kinetic-signals
 
 Most APIs use `f64`. `compute_hurst` and the surprise helpers are generic and support `f32` and `f64`. `VolEstimator` consumes `f32` absolute log-returns and computes rolling RMS volatility.
 
+### Snapshot and restore
+
+Stateful streaming estimators (`VolEstimator`, `EMA`, `SMA`) expose
+`snapshot`, `restore`, and `from_snapshot`. Snapshots carry explicit
+`schema_version` (`SNAPSHOT_SCHEMA_VERSION`, currently `1`). Restore
+validates window sizes, sample counts, and finiteness, and leaves the
+destination unchanged on failure (`SnapshotError`). `VolEstimator`
+snapshots store the physical ring (not oldest-first) so `f32` RMS order
+is preserved; `SMA` snapshots store the Welford-derived window sum.
+
+Processing segment A, snapshotting, restoring, then segment B matches
+processing A+B continuously within `RESTORE_OUTPUT_TOLERANCE` (`1e-6`).
+Non-finite `push`/`update` inputs are ignored by the live estimators and
+therefore do not appear in snapshots.
+
+The optional `serde` feature derives `Serialize` / `Deserialize` on snapshot
+types. Pair it with a format crate such as `serde_json` in the consuming
+application:
+
+```toml
+kinetic-signals = { version = "0.5", features = ["serde"] }
+serde_json = "1"
+```
+
 ### Numeric input contract
 
 Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf`) and other ill-conditioned cases produce a documented finite sentinel rather than an accidental `NaN`. Intentionally undefined results (empty history, constant R/S, non-positive surprise samples, near-zero variance) use the same sentinels and are covered by tests.
@@ -201,19 +231,28 @@ Typical execution times (Ryzen 9 9950X):
 
 ## Upgrading from v0.4.x
 
-v0.5.0 adds buffer-reuse APIs. Existing allocating functions keep their
-signatures. The new names are also exported by `prelude`:
+v0.5.0 adds buffer-reuse APIs and snapshot/restore APIs. Existing
+allocating functions, estimator constructors, `push` / `update`, and batch
+functions are unchanged.
+
+The new names are also exported by `prelude`:
 
 | New in v0.5.0 | Role |
 |---------------|------|
 | `compute_surprise_sequence_into` | Reuse a caller `Vec<SurpriseResult>` |
 | `compute_shannon_entropy_into` | Reuse a caller histogram `Vec<usize>` |
 | `surprise_sequence_len` | Output length: `n.saturating_sub(1)` |
+| `VolEstimatorSnapshot`, `EMASnapshot`, `SMASnapshot` | Versioned estimator snapshot structs |
+| `SNAPSHOT_SCHEMA_VERSION`, `RESTORE_OUTPUT_TOLERANCE` | Snapshot schema constants |
+| `SnapshotError` | Typed validation error on snapshot restore |
 
 If `use kinetic_signals::prelude::*;` is combined with another glob import
 that already defines one of those names, the compiler will report an
 ambiguous glob re-export. Replace the colliding glob with an explicit import,
 or qualify the kinetic-signals item (`kinetic_signals::compute_surprise_sequence_into`).
+
+Enable serde traits on snapshot types with `features = ["serde"]` (add a
+format crate such as `serde_json` separately).
 
 ## Upgrading from v0.3.x
 
@@ -264,8 +303,9 @@ for that stage:
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),
 or via [`prelude`](https://docs.rs/kinetic-signals/latest/kinetic_signals/prelude/index.html);
-the Cargo feature names in `[features]` (there are currently no optional crate
-feature flags), and every
+the Cargo feature names in `[features]` (optional `serde` gates
+`Serialize`/`Deserialize` on snapshot types; the default build stays
+zero-dependency), and every
 **existing** trait implementation on a public type (e.g. `Default` for
 `HawkesParams`, `Clone` for the result structs) — removing one breaks
 downstream code that relies on it, the same as removing a function. The crate

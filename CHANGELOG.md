@@ -18,6 +18,9 @@ Crate version **0.5.0**.
 
 ### Added
 
+- Versioned `snapshot` / `restore` / `from_snapshot` for `VolEstimator`, `EMA`, and `SMA`, with `SnapshotError` validation (schema version, capacity, length, layout, non-finite values, and unallocatable buffers) that does not mutate the destination on failure. `SMASnapshot::sum` is checked against the same Welford-derived window total `SMA::update` stores; `SMA::new(0)` round-trips; SMA window restore uses fallible reservation.
+- Optional `serde` feature for snapshot `Serialize` / `Deserialize`. Default and `--no-default-features` builds stay zero-dependency.
+- Replay fixture `tests/fixtures/snapshot_replay.json` covering a wrapped, non-empty `VolEstimator` window plus SMA/EMA A+B vs snapshot/restore.
 - Caller-owned buffer reuse for the hot batch output paths:
   `compute_surprise_sequence_into` and `compute_shannon_entropy_into`.
   The existing allocating functions delegate to these cores and remain
@@ -28,6 +31,7 @@ Crate version **0.5.0**.
 
 ### Breaking
 
+- Bumped the crate version to `0.5.0` for new inherent methods (`snapshot`, `restore`, `from_snapshot`) and prelude-exported snapshot types / `serde` feature, per the pre-1.0 SemVer policy. Estimator math and existing method signatures are unchanged.
 - The prelude glob now also exports `compute_surprise_sequence_into`,
   `compute_shannon_entropy_into`, and `surprise_sequence_len`. Downstream
   `use kinetic_signals::prelude::*` combined with another glob that already

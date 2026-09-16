@@ -9,9 +9,11 @@ Part of the [rmems](https://github.com/rmems) ecosystem. See [`docs/boundary-mat
 | Path | Purpose |
 |------|---------|
 | `src/` | Library code (all public modules + private `real` trait) |
+| `src/snapshot.rs` | Versioned snapshot/restore types and `SnapshotError` |
 | `examples/demo.rs` | Runnable demo covering all major APIs |
-| `tests/` | Integration tests (cross-language parity) |
+| `tests/` | Integration tests (cross-language parity, snapshot replay) |
 | `tests/fixtures/shared_vectors.json` | Shared test vectors for SpikeStream.jl parity |
+| `tests/fixtures/snapshot_replay.json` | Continuous-vs-restored rolling-window replay |
 | `docs/boundary-matrix.md` | Architecture ownership and dependency boundaries |
 | `REVIEW.md` | Code review guidelines and bot rules |
 | `AGENTS.md` | Agent instructions (this file) |
@@ -23,6 +25,7 @@ Part of the [rmems](https://github.com/rmems) ecosystem. See [`docs/boundary-mat
 
 | Dependency | Type | Purpose |
 |------------|------|---------|
+| `serde` 1 | optional | Snapshot `Serialize`/`Deserialize` behind the `serde` feature |
 | `serde_json` 1 | dev | Deserialize shared golden fixtures in tests |
 
 ## Toolchain
@@ -53,6 +56,7 @@ cargo run --example demo
 
 | Feature | Default | Description |
 |---------|---------|-------------|
+| `serde` | no | Derive `Serialize`/`Deserialize` on snapshot types |
 
 ## CI workflows
 

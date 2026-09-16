@@ -24,4 +24,9 @@ fn readme_usage_compiles_and_runs() {
     vol.push(0.01);
     vol.push(0.02);
     assert!(vol.rms().is_finite());
+
+    let snap = vol.snapshot();
+    let mut resumed = VolEstimator::from_snapshot(&snap).expect("valid snapshot");
+    resumed.push(0.015);
+    assert!(resumed.rms().is_finite());
 }
