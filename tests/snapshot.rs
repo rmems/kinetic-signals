@@ -283,6 +283,8 @@ fn snapshot_restore_rejects_invalid_length_and_non_finite_without_mutating() {
 
 #[test]
 fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
+    // usize::MAX exceeds MAX_SNAPSHOT_CAPACITY, so validate() returns
+    // InvalidCapacity before it can reach the length check.
     let snap = VolEstimatorSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         capacity: usize::MAX,
@@ -292,7 +294,7 @@ fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
     };
     assert!(matches!(
         VolEstimator::from_snapshot(&snap),
-        Err(SnapshotError::InvalidLength)
+        Err(SnapshotError::InvalidCapacity)
     ));
 }
 

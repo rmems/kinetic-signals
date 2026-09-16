@@ -143,12 +143,23 @@ pub struct VolEstimatorSnapshot {
     pub samples: Vec<f32>,
 }
 
+/// Maximum capacity accepted by [`VolEstimatorSnapshot::validate`].
+///
+/// Snapshots claiming a capacity above this threshold cannot be soundly
+/// allocated by [`crate::VolEstimator::from_snapshot`] on typical 64-bit
+/// systems and are unconditionally rejected with
+/// [`SnapshotError::InvalidCapacity`] before any allocation is attempted.
+pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
+
 impl VolEstimatorSnapshot {
     /// Check version, capacity, layout, and finiteness without allocating an
     /// estimator.
+    ///
+    /// A `capacity` of zero or above [`MAX_SNAPSHOT_CAPACITY`] is rejected
+    /// with [`SnapshotError::InvalidCapacity`].
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
-        if self.capacity == 0 {
+        if self.capacity == 0 || self.capacity > MAX_SNAPSHOT_CAPACITY {
             return Err(SnapshotError::InvalidCapacity);
         }
         if self.samples.len() != self.capacity {
@@ -357,5 +368,29 @@ mod tests {
             try_reserve_f64(usize::MAX),
             Err(SnapshotError::AllocationFailed)
         );
+    }
+
+    #[test]
+    fn vol_snapshot_rejects_oversized_capacity() {
+        let snap = VolEstimatorSnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: MAX_SNAPSHOT_CAPACITY + 1,
+            pos: 0,
+            full: false,
+            samples: vec![],
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
+    }
+
+    #[test]
+    fn sma_snapshot_rejects_inconsistent_sum_multi_element() {
+        // Window sums to 6.0 but stored sum is off by more than tolerance.
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: 3,
+            window: vec![1.0, 2.0, 3.0],
+            sum: 600.0,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
     }
 }
