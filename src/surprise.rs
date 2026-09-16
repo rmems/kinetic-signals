@@ -56,10 +56,33 @@ where
     }
 }
 
+fn params_finite<T: Real>(params: &SurpriseParams<T>) -> bool {
+    params.mu.is_finite()
+        && params.sigma.is_finite()
+        && params.dt.is_finite()
+        && params.threshold.is_finite()
+}
+
+fn expected_return<T: Real>(params: &SurpriseParams<T>) -> T {
+    let er = params.mu * params.dt;
+    if er.is_finite() { er } else { T::zero() }
+}
+
+fn zeroed<T: Real>(params: &SurpriseParams<T>) -> SurpriseResult<T> {
+    SurpriseResult {
+        surprise: T::zero(),
+        log_return: T::zero(),
+        expected_return: expected_return(params),
+        z_score: T::zero(),
+    }
+}
+
 /// Compute the surprise score for a single transition.
 ///
-/// Returns a zeroed result (no surprise) if either value is non-positive,
-/// since the log-ratio is undefined for non-positive inputs.
+/// Returns a zeroed result (no surprise) if either value is non-positive or
+/// non-finite, if any parameter is non-finite, or if `dt < 0` (the log-ratio
+/// / z-score is undefined). A non-positive `sigma` yields `z_score = 0`
+/// while still reporting the log-ratio of valid positive samples.
 ///
 /// # Example
 ///
@@ -81,38 +104,47 @@ pub fn compute_surprise<T>(
 where
     T: Real,
 {
-    if previous_value <= T::zero() || current_value <= T::zero() {
-        return SurpriseResult {
-            surprise: T::zero(),
-            log_return: T::zero(),
-            expected_return: params.mu * params.dt,
-            z_score: T::zero(),
-        };
+    if !params_finite(params)
+        || !current_value.is_finite()
+        || !previous_value.is_finite()
+        || previous_value <= T::zero()
+        || current_value <= T::zero()
+        || params.dt < T::zero()
+    {
+        return zeroed(params);
     }
 
     let log_return = (current_value / previous_value).ln();
-
-    let expected_return = params.mu * params.dt;
-
+    let expected = expected_return(params);
     let std_dev = params.sigma * params.dt.sqrt();
-
-    let z_score = if std_dev > T::zero() {
-        (log_return - expected_return) / std_dev
+    let z_score = if std_dev > T::zero() && std_dev.is_finite() && log_return.is_finite() {
+        (log_return - expected) / std_dev
+    } else {
+        T::zero()
+    };
+    let z_score = if z_score.is_finite() {
+        z_score
     } else {
         T::zero()
     };
 
-    let surprise = z_score.abs();
-
     SurpriseResult {
-        surprise,
-        log_return,
-        expected_return,
+        surprise: z_score.abs(),
+        log_return: if log_return.is_finite() {
+            log_return
+        } else {
+            T::zero()
+        },
+        expected_return: expected,
         z_score,
     }
 }
 
 /// Compute surprise scores for every consecutive transition in `values`.
+///
+/// Each pair is evaluated independently: a non-finite or non-positive sample
+/// zeroes that step without dropping the sequence length
+/// (`values.len().saturating_sub(1)`).
 pub fn compute_surprise_sequence<T>(
     values: &[T],
     params: &SurpriseParams<T>,
@@ -125,21 +157,22 @@ where
     }
 
     let mut results = Vec::with_capacity(values.len() - 1);
-
     for i in 1..values.len() {
-        let result = compute_surprise(values[i], values[i - 1], params);
-        results.push(result);
+        results.push(compute_surprise(values[i], values[i - 1], params));
     }
-
     results
 }
 
 /// Return `true` if the result's surprise exceeds the configured threshold.
+///
+/// Non-finite surprise or threshold values are not treated as anomalies.
 pub fn detect_anomaly<T>(result: &SurpriseResult<T>, params: &SurpriseParams<T>) -> bool
 where
     T: Real,
 {
-    result.surprise > params.threshold
+    result.surprise.is_finite()
+        && params.threshold.is_finite()
+        && result.surprise > params.threshold
 }
 
 #[cfg(test)]
@@ -256,5 +289,80 @@ mod tests {
             z_score: 2.0,
         };
         assert!(!detect_anomaly(&result, &params));
+    }
+
+    #[test]
+    fn test_surprise_nonfinite_is_zeroed() {
+        let params = SurpriseParams::default();
+        for (cur, prev) in [
+            (f64::NAN, 100.0),
+            (100.0, f64::NAN),
+            (f64::INFINITY, 100.0),
+            (100.0, f64::NEG_INFINITY),
+        ] {
+            let r = compute_surprise(cur, prev, &params);
+            assert_eq!(r.surprise, 0.0);
+            assert_eq!(r.z_score, 0.0);
+            assert_eq!(r.log_return, 0.0);
+            assert!(r.expected_return.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_surprise_equal_values_zero_log_return() {
+        let params = SurpriseParams::default();
+        let r = compute_surprise(42.0, 42.0, &params);
+        assert_eq!(r.log_return, 0.0);
+        assert!(r.surprise.is_finite());
+        assert_eq!(r.z_score, 0.0);
+    }
+
+    #[test]
+    fn test_surprise_zero_sigma_zero_z() {
+        let params = SurpriseParams {
+            sigma: 0.0,
+            ..SurpriseParams::default()
+        };
+        let r = compute_surprise(200.0, 100.0, &params);
+        assert_eq!(r.z_score, 0.0);
+        assert_eq!(r.surprise, 0.0);
+        assert!(r.log_return.is_finite() && r.log_return > 0.0);
+    }
+
+    #[test]
+    fn test_detect_anomaly_nonfinite_is_false() {
+        let params = SurpriseParams::default();
+        let inf = SurpriseResult {
+            surprise: f64::INFINITY,
+            log_return: 0.0,
+            expected_return: 0.0,
+            z_score: f64::INFINITY,
+        };
+        assert!(!detect_anomaly(&inf, &params));
+    }
+
+    #[test]
+    fn test_surprise_sequence_nan_step_zeroed_keeps_length() {
+        let params = SurpriseParams::default();
+        let values = [100.0, f64::NAN, 101.0];
+        let results = compute_surprise_sequence(&values, &params);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].surprise, 0.0);
+        assert_eq!(results[1].surprise, 0.0);
+    }
+
+    #[test]
+    fn test_surprise_overflow_mu_dt_expected_is_zero() {
+        let params = SurpriseParams {
+            mu: 1e300,
+            dt: 1e20,
+            ..SurpriseParams::default()
+        };
+        let r = compute_surprise(f64::NAN, 1.0, &params);
+        assert_eq!(r.expected_return, 0.0);
+        assert!(r.surprise.is_finite() && r.z_score.is_finite());
+        let ok = compute_surprise(1.1, 1.0, &params);
+        assert_eq!(ok.expected_return, 0.0);
+        assert!(ok.surprise.is_finite());
     }
 }
