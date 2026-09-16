@@ -19,6 +19,7 @@ pub trait Real:
     fn powi(self, n: i32) -> Self;
     fn max(self, other: Self) -> Self;
     fn min(self, other: Self) -> Self;
+    fn is_finite(self) -> bool;
 }
 
 impl Real for f64 {
@@ -61,6 +62,10 @@ impl Real for f64 {
     fn min(self, other: Self) -> Self {
         self.min(other)
     }
+
+    fn is_finite(self) -> bool {
+        self.is_finite()
+    }
 }
 
 impl Real for f32 {
@@ -102,5 +107,9 @@ impl Real for f32 {
 
     fn min(self, other: Self) -> Self {
         self.min(other)
+    }
+
+    fn is_finite(self) -> bool {
+        self.is_finite()
     }
 }
