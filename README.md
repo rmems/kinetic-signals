@@ -175,10 +175,14 @@ Stateful streaming estimators (`VolEstimator`, `EMA`, `SMA`) expose
 `snapshot`, `restore`, and `from_snapshot`. Snapshots carry explicit
 `schema_version` (`SNAPSHOT_SCHEMA_VERSION`, currently `1`). Restore
 validates window sizes, sample counts, and finiteness, and leaves the
-destination unchanged on failure (`SnapshotError`).
+destination unchanged on failure (`SnapshotError`). `VolEstimator`
+snapshots store the physical ring (not oldest-first) so `f32` RMS order
+is preserved; `SMA` snapshots store the Welford-derived window sum.
 
 Processing segment A, snapshotting, restoring, then segment B matches
 processing A+B continuously within `RESTORE_OUTPUT_TOLERANCE` (`1e-6`).
+Non-finite `push`/`update` inputs are ignored by the live estimators and
+therefore do not appear in snapshots.
 
 The optional `serde` feature derives `Serialize` / `Deserialize` on snapshot
 types. Pair it with a format crate such as `serde_json` in the consuming

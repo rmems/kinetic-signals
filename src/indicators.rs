@@ -10,7 +10,9 @@
 //! - [`ZScore`] — z-score (standard-score) normalization helper
 
 use crate::numeric::{finite_or_zero, stable_mean};
-use crate::snapshot::{EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError};
+use crate::snapshot::{
+    EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError, sma_canonical_sum,
+};
 
 /// Exponential moving average (EMA) for streaming data.
 ///
@@ -216,12 +218,16 @@ impl SMA {
     }
 
     /// Build an SMA from a validated snapshot.
+    ///
+    /// `sum` is reconstructed with the same Welford-derived total
+    /// [`Self::update`] stores, so a snapshot that passed validation always
+    /// restores to live-estimator state.
     pub fn from_snapshot(snapshot: &SMASnapshot) -> Result<Self, SnapshotError> {
         snapshot.validate()?;
         Ok(Self {
             window: snapshot.window.clone(),
             capacity: snapshot.capacity,
-            sum: snapshot.sum,
+            sum: sma_canonical_sum(&snapshot.window),
         })
     }
 
@@ -419,6 +425,10 @@ mod tests {
         assert_eq!(sma.update(1.0), 0.0);
         assert!(sma.window.is_empty());
         assert_eq!(sma.update(f64::NAN), 0.0);
+        let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
+        assert_eq!(restored.capacity, 0);
+        assert!(restored.window.is_empty());
+        assert_eq!(restored.sum, 0.0);
     }
 
     #[test]
@@ -437,5 +447,9 @@ mod tests {
         let mean = sma.update(-f64::MAX);
         assert!(mean.is_finite());
         assert_eq!(mean, 0.0);
+        let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
+        assert_eq!(restored.window, sma.window);
+        assert_eq!(restored.sum, sma.sum);
+        assert_eq!(restored.update(1.0), sma.update(1.0));
     }
 }

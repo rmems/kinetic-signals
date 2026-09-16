@@ -14,6 +14,8 @@
 use std::error::Error;
 use std::fmt;
 
+use crate::numeric::{finite_or_zero, stable_mean};
+
 /// Schema version written by [`crate::VolEstimator::snapshot`],
 /// [`crate::EMA::snapshot`], and [`crate::SMA::snapshot`].
 pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
@@ -101,6 +103,13 @@ pub(crate) fn alloc_zeros_f32(len: usize) -> Result<Vec<f32>, SnapshotError> {
     Ok(buf)
 }
 
+pub(crate) fn sma_canonical_sum(window: &[f64]) -> f64 {
+    match stable_mean(window) {
+        Some(mean) => finite_or_zero(mean * window.len() as f64),
+        None => 0.0,
+    }
+}
+
 /// Canonical ring-buffer state for [`crate::VolEstimator`].
 ///
 /// `samples` is the physical ring (`samples.len() == capacity`) in storage
@@ -176,29 +185,27 @@ impl EMASnapshot {
 
 /// Canonical state for [`crate::SMA`].
 ///
-/// `window` is oldest-first. `sum` is the running sum used by
-/// [`crate::SMA::update`] and is restored as-is so subsequent outputs match
-/// the original estimator (it may drift from `window.iter().sum()`).
+/// `window` is oldest-first. `sum` must match the Welford-derived total
+/// [`crate::SMA::update`] stores (window mean times count, or `0.0` when
+/// empty). Capacity `0` is valid when `window` is empty and `sum` is `0.0`,
+/// matching [`crate::SMA::new`].
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SMASnapshot {
     /// Must equal [`SNAPSHOT_SCHEMA_VERSION`].
     pub schema_version: u32,
-    /// Maximum number of samples retained (`> 0`).
+    /// Maximum number of samples retained (`0` is a no-op estimator).
     pub capacity: usize,
     /// Samples currently in the window, oldest first.
     pub window: Vec<f64>,
-    /// Running sum of `window`.
+    /// Welford-derived sum of `window`.
     pub sum: f64,
 }
 
 impl SMASnapshot {
-    /// Check version, capacity, length, finiteness, and empty-window sum.
+    /// Check version, capacity, length, finiteness, and Welford-derived sum.
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
-        if self.capacity == 0 {
-            return Err(SnapshotError::InvalidCapacity);
-        }
         if self.window.len() > self.capacity {
             return Err(SnapshotError::InvalidLength);
         }
@@ -206,16 +213,7 @@ impl SMASnapshot {
             require_finite_f64(x)?;
         }
         require_finite_f64(self.sum)?;
-        if self.window.is_empty() {
-            if self.sum != 0.0 {
-                return Err(SnapshotError::InconsistentState);
-            }
-            return Ok(());
-        }
-        let recomputed: f64 = self.window.iter().copied().sum();
-        let scale = self.sum.abs().max(recomputed.abs()).max(1.0);
-        let bound = RESTORE_OUTPUT_TOLERANCE * scale * (self.window.len() as f64);
-        if (self.sum - recomputed).abs() > bound {
+        if self.sum != sma_canonical_sum(&self.window) {
             return Err(SnapshotError::InconsistentState);
         }
         Ok(())
@@ -315,5 +313,27 @@ mod tests {
             sum: 100.0,
         };
         assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+    }
+
+    #[test]
+    fn sma_snapshot_accepts_zero_capacity_empty_window() {
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: 0,
+            window: vec![],
+            sum: 0.0,
+        };
+        assert_eq!(snap.validate(), Ok(()));
+    }
+
+    #[test]
+    fn sma_snapshot_rejects_zero_capacity_with_samples() {
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: 0,
+            window: vec![1.0],
+            sum: 1.0,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
     }
 }

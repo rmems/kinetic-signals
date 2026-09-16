@@ -216,17 +216,15 @@ fn from_snapshot_rejects_zero_capacity() {
         VolEstimator::from_snapshot(&vol),
         Err(SnapshotError::InvalidCapacity)
     ));
+}
 
-    let sma = SMASnapshot {
-        schema_version: SNAPSHOT_SCHEMA_VERSION,
-        capacity: 0,
-        window: vec![],
-        sum: 0.0,
-    };
-    assert!(matches!(
-        SMA::from_snapshot(&sma),
-        Err(SnapshotError::InvalidCapacity)
-    ));
+#[test]
+fn snapshot_sma_zero_capacity_round_trips() {
+    let sma = SMA::new(0);
+    let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
+    assert_eq!(restored.capacity, 0);
+    assert!(restored.window.is_empty());
+    assert_eq!(restored.sum, 0.0);
 }
 
 #[test]
@@ -296,6 +294,54 @@ fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
         VolEstimator::from_snapshot(&snap),
         Err(SnapshotError::InvalidLength)
     ));
+}
+
+#[test]
+fn snapshot_restore_skips_non_finite_inputs_like_live_estimators() {
+    let mut vol_with_nan = VolEstimator::new(3);
+    vol_with_nan.push(0.1);
+    vol_with_nan.push(f32::NAN);
+    vol_with_nan.push(0.2);
+    let mut vol_clean = VolEstimator::new(3);
+    vol_clean.push(0.1);
+    vol_clean.push(0.2);
+    let mut vol_restored = VolEstimator::from_snapshot(&vol_with_nan.snapshot()).unwrap();
+    vol_with_nan.push(0.3);
+    vol_clean.push(0.3);
+    vol_restored.push(0.3);
+    assert_eq!(vol_restored.rms(), vol_clean.rms());
+    assert_eq!(vol_with_nan.rms(), vol_clean.rms());
+
+    let mut ema_with_nan = EMA::new(5);
+    ema_with_nan.update(10.0);
+    ema_with_nan.update(f64::INFINITY);
+    ema_with_nan.update(12.0);
+    let mut ema_clean = EMA::new(5);
+    ema_clean.update(10.0);
+    ema_clean.update(12.0);
+    let mut ema_restored = EMA::from_snapshot(&ema_with_nan.snapshot()).unwrap();
+    ema_with_nan.update(11.0);
+    ema_clean.update(11.0);
+    ema_restored.update(11.0);
+    assert_eq!(ema_restored.value, ema_clean.value);
+    assert_eq!(ema_with_nan.value, ema_clean.value);
+
+    let mut sma_with_nan = SMA::new(3);
+    sma_with_nan.update(1.0);
+    sma_with_nan.update(f64::NAN);
+    sma_with_nan.update(2.0);
+    sma_with_nan.update(3.0);
+    let mut sma_clean = SMA::new(3);
+    sma_clean.update(1.0);
+    sma_clean.update(2.0);
+    sma_clean.update(3.0);
+    let mut sma_restored = SMA::from_snapshot(&sma_with_nan.snapshot()).unwrap();
+    sma_with_nan.update(4.0);
+    sma_clean.update(4.0);
+    sma_restored.update(4.0);
+    assert_eq!(sma_restored.window, sma_clean.window);
+    assert_eq!(sma_restored.sum, sma_clean.sum);
+    assert_eq!(sma_with_nan.sum, sma_clean.sum);
 }
 
 #[cfg(feature = "serde")]
