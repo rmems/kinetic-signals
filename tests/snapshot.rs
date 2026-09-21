@@ -3,8 +3,8 @@
 //! End-to-end snapshot/restore replay against `tests/fixtures/snapshot_replay.json`.
 
 use kinetic_signals::{
-    EMA, EMASnapshot, RESTORE_OUTPUT_TOLERANCE, SMA, SMASnapshot, SNAPSHOT_SCHEMA_VERSION,
-    SnapshotError, VolEstimator, VolEstimatorSnapshot,
+    EMA, EMASnapshot, MAX_SNAPSHOT_CAPACITY, RESTORE_OUTPUT_TOLERANCE, SMA, SMASnapshot,
+    SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimator, VolEstimatorSnapshot,
 };
 use serde_json::Value;
 
@@ -220,13 +220,30 @@ fn from_snapshot_rejects_zero_capacity() {
 
 #[test]
 fn snapshot_vol_large_valid_capacity_round_trips() {
-    let mut vol = VolEstimator::new(1_000_001);
+    let mut vol = VolEstimator::new(MAX_SNAPSHOT_CAPACITY);
     vol.push(0.25);
 
     let restored = VolEstimator::from_snapshot(&vol.snapshot()).unwrap();
 
     assert_eq!(restored.len(), 1);
     assert_eq!(restored.rms(), 0.25);
+}
+
+#[test]
+fn snapshot_vol_rejects_capacity_above_supported_limit_without_mutating() {
+    let mut vol = VolEstimator::new(2);
+    vol.push(0.25);
+    let before = vol.snapshot();
+    let oversized = VolEstimatorSnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: MAX_SNAPSHOT_CAPACITY + 1,
+        pos: 0,
+        full: false,
+        samples: vec![],
+    };
+
+    assert_eq!(vol.restore(&oversized), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(vol.snapshot(), before);
 }
 
 #[test]
@@ -323,7 +340,7 @@ fn snapshot_restore_rejects_unsupported_ema_alpha_without_mutating() {
 }
 
 #[test]
-fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
+fn snapshot_from_snapshot_rejects_capacity_above_supported_limit() {
     let snap = VolEstimatorSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         capacity: usize::MAX,
@@ -333,7 +350,7 @@ fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
     };
     assert!(matches!(
         VolEstimator::from_snapshot(&snap),
-        Err(SnapshotError::InvalidLength)
+        Err(SnapshotError::InvalidCapacity)
     ));
 }
 

@@ -68,8 +68,8 @@ pub use hawkes::{HawkesParams, HawkesResult, compute_hawkes, compute_hawkes_stre
 pub use hurst::{HurstResult, compute_hurst};
 pub use indicators::{EMA, SMA, ZScore};
 pub use snapshot::{
-    EMASnapshot, RESTORE_OUTPUT_TOLERANCE, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError,
-    VolEstimatorSnapshot,
+    EMASnapshot, MAX_SNAPSHOT_CAPACITY, RESTORE_OUTPUT_TOLERANCE, SMASnapshot,
+    SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimatorSnapshot,
 };
 pub use stats::{SignalStats, compute_signal_stats};
 pub use surprise::{

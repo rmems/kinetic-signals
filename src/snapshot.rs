@@ -20,6 +20,13 @@ use crate::numeric::{finite_or_zero, stable_mean};
 /// [`crate::EMA::snapshot`], and [`crate::SMA::snapshot`].
 pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
+/// Largest supported ring capacity for [`crate::VolEstimator`] and its
+/// snapshot payload.
+///
+/// A bounded capacity keeps an externally supplied snapshot from requesting
+/// an unbounded allocation during restore.
+pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
+
 /// Absolute error bound for comparing outputs of a continuously processed
 /// estimator against one that was snapshotted and restored between segments.
 pub const RESTORE_OUTPUT_TOLERANCE: f64 = 1e-6;
@@ -152,6 +159,9 @@ impl VolEstimatorSnapshot {
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
         if self.capacity == 0 {
+            return Err(SnapshotError::InvalidCapacity);
+        }
+        if self.capacity > MAX_SNAPSHOT_CAPACITY {
             return Err(SnapshotError::InvalidCapacity);
         }
         if self.samples.len() != self.capacity {
@@ -366,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn vol_snapshot_rejects_unrepresentable_capacity_layout() {
+    fn vol_snapshot_rejects_capacity_above_supported_limit() {
         let snap = VolEstimatorSnapshot {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
             capacity: usize::MAX,
@@ -374,7 +384,7 @@ mod tests {
             full: false,
             samples: vec![],
         };
-        assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
+        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
     }
 
     #[test]

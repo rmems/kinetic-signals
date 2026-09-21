@@ -177,7 +177,8 @@ Stateful streaming estimators (`VolEstimator`, `EMA`, `SMA`) expose
 validates window sizes, sample counts, and finiteness, and leaves the
 destination unchanged on failure (`SnapshotError`). `VolEstimator`
 snapshots store the physical ring (not oldest-first) so `f32` RMS order
-is preserved and accept every positive capacity accepted by its constructor;
+is preserved and accept capacities in `1..=MAX_SNAPSHOT_CAPACITY`, matching
+its constructor;
 `EMA` snapshots require a finite smoothing factor in `(0, 2]`; and `SMA`
 restore reserves the declared window capacity before restoring its
 Welford-derived window sum.

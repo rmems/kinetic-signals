@@ -53,13 +53,13 @@ Expected: FAIL because `VolEstimator::from_snapshot` returns `SnapshotError::Inv
 
 - [ ] **Step 3: Write the minimal implementation**
 
-Remove `MAX_SNAPSHOT_CAPACITY` and its validation branch. Keep zero-capacity, layout, position, finiteness, and fallible allocation validation intact. Update the impossible-capacity regression to expect `InvalidLength` before allocation when the snapshot vector cannot match `usize::MAX`.
+Retain `MAX_SNAPSHOT_CAPACITY` as the public upper bound and enforce it in both `VolEstimator::new` and snapshot validation. Keep zero-capacity, layout, position, finiteness, and fallible allocation validation intact.
 
 - [ ] **Step 4: Verify the targeted tests pass**
 
-Run: `cargo test --test snapshot snapshot_vol_large_valid_capacity_round_trips snapshot_from_snapshot_rejects_unallocatable_capacity`
+Run each targeted test separately: `cargo test --test snapshot snapshot_vol_large_valid_capacity_round_trips` and `cargo test --test snapshot snapshot_vol_rejects_capacity_above_supported_limit_without_mutating`.
 
-Expected: PASS; valid large snapshots round-trip and malformed impossible snapshots remain rejected.
+Expected: PASS; the maximum supported snapshot round-trips, while an over-limit payload is rejected without mutating the estimator.
 
 - [ ] **Step 5: Commit**
 
