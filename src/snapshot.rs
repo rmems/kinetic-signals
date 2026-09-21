@@ -110,8 +110,11 @@ fn try_reserve_f64(len: usize) -> Result<Vec<f64>, SnapshotError> {
     Ok(buf)
 }
 
-pub(crate) fn clone_f64_slice(src: &[f64]) -> Result<Vec<f64>, SnapshotError> {
-    let mut buf = try_reserve_f64(src.len())?;
+pub(crate) fn clone_f64_slice_at_capacity(
+    src: &[f64],
+    capacity: usize,
+) -> Result<Vec<f64>, SnapshotError> {
+    let mut buf = try_reserve_f64(capacity)?;
     buf.extend_from_slice(src);
     Ok(buf)
 }
@@ -143,23 +146,12 @@ pub struct VolEstimatorSnapshot {
     pub samples: Vec<f32>,
 }
 
-/// Maximum capacity accepted by [`VolEstimatorSnapshot::validate`].
-///
-/// Snapshots claiming a capacity above this threshold cannot be soundly
-/// allocated by [`crate::VolEstimator::from_snapshot`] on typical 64-bit
-/// systems and are unconditionally rejected with
-/// [`SnapshotError::InvalidCapacity`] before any allocation is attempted.
-pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
-
 impl VolEstimatorSnapshot {
     /// Check version, capacity, layout, and finiteness without allocating an
     /// estimator.
-    ///
-    /// A `capacity` of zero or above [`MAX_SNAPSHOT_CAPACITY`] is rejected
-    /// with [`SnapshotError::InvalidCapacity`].
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
-        if self.capacity == 0 || self.capacity > MAX_SNAPSHOT_CAPACITY {
+        if self.capacity == 0 {
             return Err(SnapshotError::InvalidCapacity);
         }
         if self.samples.len() != self.capacity {
@@ -192,12 +184,12 @@ pub struct EMASnapshot {
 impl EMASnapshot {
     /// Check version and finiteness without allocating an estimator.
     ///
-    /// `alpha` must be finite and `> 0`. Values greater than 1 are accepted
-    /// so [`crate::EMA::new`] with `period == 0` (`α = 2`) can round-trip.
+    /// `alpha` must be finite and in `(0, 2]`, matching values produced by
+    /// [`crate::EMA::new`], including `period == 0` (`α = 2`).
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
         require_finite_f64(self.alpha)?;
-        if self.alpha <= 0.0 {
+        if !(0.0 < self.alpha && self.alpha <= 2.0) {
             return Err(SnapshotError::InconsistentState);
         }
         if self.initialized {
@@ -362,8 +354,11 @@ mod tests {
     }
 
     #[test]
-    fn clone_f64_slice_round_trips_and_maps_overflow_len() {
-        assert_eq!(clone_f64_slice(&[1.0, 2.0]).unwrap(), vec![1.0, 2.0]);
+    fn clone_f64_slice_at_capacity_round_trips_and_maps_overflow_len() {
+        assert_eq!(
+            clone_f64_slice_at_capacity(&[1.0, 2.0], 4).unwrap(),
+            vec![1.0, 2.0]
+        );
         assert_eq!(
             try_reserve_f64(usize::MAX),
             Err(SnapshotError::AllocationFailed)
@@ -371,15 +366,15 @@ mod tests {
     }
 
     #[test]
-    fn vol_snapshot_rejects_oversized_capacity() {
+    fn vol_snapshot_rejects_unrepresentable_capacity_layout() {
         let snap = VolEstimatorSnapshot {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
-            capacity: MAX_SNAPSHOT_CAPACITY + 1,
+            capacity: usize::MAX,
             pos: 0,
             full: false,
             samples: vec![],
         };
-        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
+        assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
     }
 
     #[test]

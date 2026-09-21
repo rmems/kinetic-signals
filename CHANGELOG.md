@@ -10,6 +10,10 @@ Crate version **0.5.0**.
 
 ### Fixed
 
+- Snapshot restore now accepts every positive `VolEstimator` capacity accepted by
+  the constructor, rejects EMA smoothing factors outside `(0, 2]` atomically,
+  and reserves an SMA snapshot's declared capacity before restoring its
+  occupied window.
 - Public numerical APIs now treat non-finite inputs (`NaN`, `±Inf`) and ill-conditioned windows (constant / near-constant, near-zero variance, non-monotonic Hawkes times) as documented finite sentinels instead of propagating accidental `NaN` or `Inf`.
 - `compute_hurst` no longer reports `h = 0` (antipersistent) for a NaN series: `f64::max` was swallowing NaN during the `[0, 1]` clamp. Constant and non-finite series now use the existing underdetermined sentinel `h = 0.5`.
 - `compute_signal_stats` accumulates the mean with Welford's method; `SMA` recomputes the window mean with Welford after each accepted sample; `VolEstimator::rms` squares in `f64` before clamping.
