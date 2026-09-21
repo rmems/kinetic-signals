@@ -38,7 +38,9 @@ impl VolEstimator {
     /// # Panics
     ///
     /// Panics if `capacity` is `0` or exceeds
-    /// [`crate::MAX_SNAPSHOT_CAPACITY`].
+    /// [`crate::MAX_SNAPSHOT_CAPACITY`] (`1_000_000`, about 4 MiB of `f32`
+    /// samples). That upper bound is an intentional v0.5.0 breaking change
+    /// relative to the previously unbounded constructor.
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "capacity must be > 0");
         assert!(

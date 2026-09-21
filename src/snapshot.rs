@@ -20,11 +20,12 @@ use crate::numeric::{finite_or_zero, stable_mean};
 /// [`crate::EMA::snapshot`], and [`crate::SMA::snapshot`].
 pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
-/// Largest supported ring capacity for [`crate::VolEstimator`] and its
-/// snapshot payload.
+/// Largest supported window capacity for [`crate::VolEstimator`] construction
+/// and restore, and for [`crate::SMA`] snapshot restore.
 ///
-/// A bounded capacity keeps an externally supplied snapshot from requesting
-/// an unbounded allocation during restore.
+/// `1_000_000` `f32` samples is about 4 MiB. Bounding capacity keeps an
+/// externally supplied snapshot from requesting an unbounded allocation
+/// during restore (`VolEstimator` ring and declared `SMA` window capacity).
 pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
 
 /// Absolute error bound for comparing outputs of a continuously processed
@@ -214,13 +215,15 @@ impl EMASnapshot {
 /// `window` is oldest-first. `sum` must match the Welford-derived total
 /// [`crate::SMA::update`] stores (window mean times count, or `0.0` when
 /// empty). Capacity `0` is valid when `window` is empty and `sum` is `0.0`,
-/// matching [`crate::SMA::new`].
+/// matching [`crate::SMA::new`]. Restore rejects `capacity` above
+/// [`MAX_SNAPSHOT_CAPACITY`] before reserving the declared buffer.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SMASnapshot {
     /// Must equal [`SNAPSHOT_SCHEMA_VERSION`].
     pub schema_version: u32,
-    /// Maximum number of samples retained (`0` is a no-op estimator).
+    /// Maximum number of samples retained (`0` is a no-op estimator;
+    /// restore also requires `capacity <= MAX_SNAPSHOT_CAPACITY`).
     pub capacity: usize,
     /// Samples currently in the window, oldest first.
     pub window: Vec<f64>,
@@ -232,6 +235,9 @@ impl SMASnapshot {
     /// Check version, capacity, length, finiteness, and Welford-derived sum.
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
+        if self.capacity > MAX_SNAPSHOT_CAPACITY {
+            return Err(SnapshotError::InvalidCapacity);
+        }
         if self.window.len() > self.capacity {
             return Err(SnapshotError::InvalidLength);
         }
@@ -361,6 +367,17 @@ mod tests {
             sum: 1.0,
         };
         assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
+    }
+
+    #[test]
+    fn sma_snapshot_rejects_capacity_above_supported_limit() {
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: usize::MAX,
+            window: vec![],
+            sum: 0.0,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
     }
 
     #[test]

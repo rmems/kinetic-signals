@@ -268,6 +268,25 @@ fn snapshot_sma_restore_preserves_declared_buffer_capacity() {
 }
 
 #[test]
+fn snapshot_sma_rejects_huge_capacity_with_small_window_without_reserving() {
+    let mut sma = SMA::new(2);
+    sma.update(1.0);
+    let before = sma.clone();
+    let oversized = SMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: usize::MAX,
+        window: vec![],
+        sum: 0.0,
+    };
+
+    assert_eq!(oversized.validate(), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(sma.restore(&oversized), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(sma.window, before.window);
+    assert_eq!(sma.sum, before.sum);
+    assert_eq!(sma.capacity, before.capacity);
+}
+
+#[test]
 fn snapshot_restore_rejects_invalid_length_and_non_finite_without_mutating() {
     let mut vol = VolEstimator::new(2);
     vol.push(0.1);
