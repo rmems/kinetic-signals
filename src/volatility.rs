@@ -3,7 +3,8 @@
 //! Rolling RMS volatility estimator — zero-alloc, fixed-size ring buffer.
 
 use crate::snapshot::{
-    SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimatorSnapshot, alloc_zeros_f32,
+    MAX_SNAPSHOT_CAPACITY, SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimatorSnapshot,
+    alloc_zeros_f32,
 };
 
 /// Rolling RMS volatility estimator over a fixed window.
@@ -36,9 +37,16 @@ impl VolEstimator {
     ///
     /// # Panics
     ///
-    /// Panics if `capacity` is `0`.
+    /// Panics if `capacity` is `0` or exceeds
+    /// [`crate::MAX_SNAPSHOT_CAPACITY`] (`1_000_000`, about 4 MiB of `f32`
+    /// samples). That upper bound is an intentional v0.5.0 breaking change
+    /// relative to the previously unbounded constructor.
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "capacity must be > 0");
+        assert!(
+            capacity <= MAX_SNAPSHOT_CAPACITY,
+            "capacity must be <= MAX_SNAPSHOT_CAPACITY"
+        );
         Self {
             buf: vec![0.0; capacity],
             pos: 0,
@@ -181,6 +189,12 @@ mod tests {
     #[should_panic(expected = "capacity must be > 0")]
     fn test_vol_estimator_zero_capacity_panics() {
         let _ = VolEstimator::new(0);
+    }
+
+    #[test]
+    #[should_panic(expected = "capacity must be <= MAX_SNAPSHOT_CAPACITY")]
+    fn test_vol_estimator_capacity_above_snapshot_limit_panics() {
+        let _ = VolEstimator::new(crate::MAX_SNAPSHOT_CAPACITY + 1);
     }
 
     #[test]

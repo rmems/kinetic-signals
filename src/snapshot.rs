@@ -20,6 +20,14 @@ use crate::numeric::{finite_or_zero, stable_mean};
 /// [`crate::EMA::snapshot`], and [`crate::SMA::snapshot`].
 pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
+/// Largest supported window capacity for [`crate::VolEstimator`] construction
+/// and restore, and for [`crate::SMA`] snapshot restore.
+///
+/// `1_000_000` `f32` samples is about 4 MiB. Bounding capacity keeps an
+/// externally supplied snapshot from requesting an unbounded allocation
+/// during restore (`VolEstimator` ring and declared `SMA` window capacity).
+pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
+
 /// Absolute error bound for comparing outputs of a continuously processed
 /// estimator against one that was snapshotted and restored between segments.
 pub const RESTORE_OUTPUT_TOLERANCE: f64 = 1e-6;
@@ -110,8 +118,11 @@ fn try_reserve_f64(len: usize) -> Result<Vec<f64>, SnapshotError> {
     Ok(buf)
 }
 
-pub(crate) fn clone_f64_slice(src: &[f64]) -> Result<Vec<f64>, SnapshotError> {
-    let mut buf = try_reserve_f64(src.len())?;
+pub(crate) fn clone_f64_slice_at_capacity(
+    src: &[f64],
+    capacity: usize,
+) -> Result<Vec<f64>, SnapshotError> {
+    let mut buf = try_reserve_f64(capacity)?;
     buf.extend_from_slice(src);
     Ok(buf)
 }
@@ -143,23 +154,15 @@ pub struct VolEstimatorSnapshot {
     pub samples: Vec<f32>,
 }
 
-/// Maximum capacity accepted by [`VolEstimatorSnapshot::validate`].
-///
-/// Snapshots claiming a capacity above this threshold cannot be soundly
-/// allocated by [`crate::VolEstimator::from_snapshot`] on typical 64-bit
-/// systems and are unconditionally rejected with
-/// [`SnapshotError::InvalidCapacity`] before any allocation is attempted.
-pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
-
 impl VolEstimatorSnapshot {
     /// Check version, capacity, layout, and finiteness without allocating an
     /// estimator.
-    ///
-    /// A `capacity` of zero or above [`MAX_SNAPSHOT_CAPACITY`] is rejected
-    /// with [`SnapshotError::InvalidCapacity`].
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
-        if self.capacity == 0 || self.capacity > MAX_SNAPSHOT_CAPACITY {
+        if self.capacity == 0 {
+            return Err(SnapshotError::InvalidCapacity);
+        }
+        if self.capacity > MAX_SNAPSHOT_CAPACITY {
             return Err(SnapshotError::InvalidCapacity);
         }
         if self.samples.len() != self.capacity {
@@ -192,12 +195,12 @@ pub struct EMASnapshot {
 impl EMASnapshot {
     /// Check version and finiteness without allocating an estimator.
     ///
-    /// `alpha` must be finite and `> 0`. Values greater than 1 are accepted
-    /// so [`crate::EMA::new`] with `period == 0` (`α = 2`) can round-trip.
+    /// `alpha` must be finite and in `(0, 2]`, matching values produced by
+    /// [`crate::EMA::new`], including `period == 0` (`α = 2`).
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
         require_finite_f64(self.alpha)?;
-        if self.alpha <= 0.0 {
+        if !(0.0 < self.alpha && self.alpha <= 2.0) {
             return Err(SnapshotError::InconsistentState);
         }
         if self.initialized {
@@ -212,13 +215,15 @@ impl EMASnapshot {
 /// `window` is oldest-first. `sum` must match the Welford-derived total
 /// [`crate::SMA::update`] stores (window mean times count, or `0.0` when
 /// empty). Capacity `0` is valid when `window` is empty and `sum` is `0.0`,
-/// matching [`crate::SMA::new`].
+/// matching [`crate::SMA::new`]. Restore rejects `capacity` above
+/// [`MAX_SNAPSHOT_CAPACITY`] before reserving the declared buffer.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SMASnapshot {
     /// Must equal [`SNAPSHOT_SCHEMA_VERSION`].
     pub schema_version: u32,
-    /// Maximum number of samples retained (`0` is a no-op estimator).
+    /// Maximum number of samples retained (`0` is a no-op estimator;
+    /// restore also requires `capacity <= MAX_SNAPSHOT_CAPACITY`).
     pub capacity: usize,
     /// Samples currently in the window, oldest first.
     pub window: Vec<f64>,
@@ -230,6 +235,9 @@ impl SMASnapshot {
     /// Check version, capacity, length, finiteness, and Welford-derived sum.
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
+        if self.capacity > MAX_SNAPSHOT_CAPACITY {
+            return Err(SnapshotError::InvalidCapacity);
+        }
         if self.window.len() > self.capacity {
             return Err(SnapshotError::InvalidLength);
         }
@@ -362,8 +370,22 @@ mod tests {
     }
 
     #[test]
-    fn clone_f64_slice_round_trips_and_maps_overflow_len() {
-        assert_eq!(clone_f64_slice(&[1.0, 2.0]).unwrap(), vec![1.0, 2.0]);
+    fn sma_snapshot_rejects_capacity_above_supported_limit() {
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: usize::MAX,
+            window: vec![],
+            sum: 0.0,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
+    }
+
+    #[test]
+    fn clone_f64_slice_at_capacity_round_trips_and_maps_overflow_len() {
+        assert_eq!(
+            clone_f64_slice_at_capacity(&[1.0, 2.0], 4).unwrap(),
+            vec![1.0, 2.0]
+        );
         assert_eq!(
             try_reserve_f64(usize::MAX),
             Err(SnapshotError::AllocationFailed)
@@ -371,10 +393,10 @@ mod tests {
     }
 
     #[test]
-    fn vol_snapshot_rejects_oversized_capacity() {
+    fn vol_snapshot_rejects_capacity_above_supported_limit() {
         let snap = VolEstimatorSnapshot {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
-            capacity: MAX_SNAPSHOT_CAPACITY + 1,
+            capacity: usize::MAX,
             pos: 0,
             full: false,
             samples: vec![],

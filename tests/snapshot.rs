@@ -3,8 +3,8 @@
 //! End-to-end snapshot/restore replay against `tests/fixtures/snapshot_replay.json`.
 
 use kinetic_signals::{
-    EMA, EMASnapshot, RESTORE_OUTPUT_TOLERANCE, SMA, SMASnapshot, SNAPSHOT_SCHEMA_VERSION,
-    SnapshotError, VolEstimator, VolEstimatorSnapshot,
+    EMA, EMASnapshot, MAX_SNAPSHOT_CAPACITY, RESTORE_OUTPUT_TOLERANCE, SMA, SMASnapshot,
+    SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimator, VolEstimatorSnapshot,
 };
 use serde_json::Value;
 
@@ -219,12 +219,71 @@ fn from_snapshot_rejects_zero_capacity() {
 }
 
 #[test]
+fn snapshot_vol_large_valid_capacity_round_trips() {
+    let mut vol = VolEstimator::new(MAX_SNAPSHOT_CAPACITY);
+    vol.push(0.25);
+
+    let restored = VolEstimator::from_snapshot(&vol.snapshot()).unwrap();
+
+    assert_eq!(restored.len(), 1);
+    assert_eq!(restored.rms(), 0.25);
+}
+
+#[test]
+fn snapshot_vol_rejects_capacity_above_supported_limit_without_mutating() {
+    let mut vol = VolEstimator::new(2);
+    vol.push(0.25);
+    let before = vol.snapshot();
+    let oversized = VolEstimatorSnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: MAX_SNAPSHOT_CAPACITY + 1,
+        pos: 0,
+        full: false,
+        samples: vec![],
+    };
+
+    assert_eq!(vol.restore(&oversized), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(vol.snapshot(), before);
+}
+
+#[test]
 fn snapshot_sma_zero_capacity_round_trips() {
     let sma = SMA::new(0);
     let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
     assert_eq!(restored.capacity, 0);
     assert!(restored.window.is_empty());
     assert_eq!(restored.sum, 0.0);
+}
+
+#[test]
+fn snapshot_sma_restore_preserves_declared_buffer_capacity() {
+    let mut sma = SMA::new(64);
+    sma.update(1.0);
+
+    let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
+
+    assert_eq!(restored.capacity, 64);
+    assert!(restored.window.capacity() >= 64);
+    assert_eq!(restored.window, vec![1.0]);
+}
+
+#[test]
+fn snapshot_sma_rejects_huge_capacity_with_small_window_without_reserving() {
+    let mut sma = SMA::new(2);
+    sma.update(1.0);
+    let before = sma.clone();
+    let oversized = SMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: usize::MAX,
+        window: vec![],
+        sum: 0.0,
+    };
+
+    assert_eq!(oversized.validate(), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(sma.restore(&oversized), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(sma.window, before.window);
+    assert_eq!(sma.sum, before.sum);
+    assert_eq!(sma.capacity, before.capacity);
 }
 
 #[test]
@@ -282,9 +341,25 @@ fn snapshot_restore_rejects_invalid_length_and_non_finite_without_mutating() {
 }
 
 #[test]
-fn snapshot_from_snapshot_rejects_unallocatable_capacity() {
-    // usize::MAX exceeds MAX_SNAPSHOT_CAPACITY, so validate() returns
-    // InvalidCapacity before it can reach the length check.
+fn snapshot_restore_rejects_unsupported_ema_alpha_without_mutating() {
+    let mut ema = EMA::new(4);
+    ema.update(10.0);
+    let before = ema.clone();
+    let invalid = EMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        value: 1.0,
+        alpha: 3.0,
+        initialized: true,
+    };
+
+    assert_eq!(ema.restore(&invalid), Err(SnapshotError::InconsistentState));
+    assert_eq!(ema.value, before.value);
+    assert_eq!(ema.alpha, before.alpha);
+    assert_eq!(ema.initialized, before.initialized);
+}
+
+#[test]
+fn snapshot_from_snapshot_rejects_capacity_above_supported_limit() {
     let snap = VolEstimatorSnapshot {
         schema_version: SNAPSHOT_SCHEMA_VERSION,
         capacity: usize::MAX,
@@ -359,4 +434,34 @@ fn snapshot_serde_roundtrip_preserves_vol_estimator_outputs() {
     src.push(0.06);
     restored.push(0.06);
     assert!((src.rms() - restored.rms()).abs() < RESTORE_OUTPUT_TOLERANCE as f32);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn snapshot_serde_roundtrip_preserves_ema_outputs() {
+    let mut src = EMA::new(4);
+    src.update(10.0);
+    src.update(12.0);
+
+    let json = serde_json::to_string(&src.snapshot()).unwrap();
+    let decoded: EMASnapshot = serde_json::from_str(&json).unwrap();
+    let mut restored = EMA::from_snapshot(&decoded).unwrap();
+
+    assert_eq!(restored.update(11.0), src.update(11.0));
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn snapshot_serde_roundtrip_preserves_sma_window_and_capacity() {
+    let mut src = SMA::new(8);
+    src.update(1.0);
+    src.update(2.0);
+
+    let json = serde_json::to_string(&src.snapshot()).unwrap();
+    let decoded: SMASnapshot = serde_json::from_str(&json).unwrap();
+    let mut restored = SMA::from_snapshot(&decoded).unwrap();
+
+    assert!(restored.window.capacity() >= 8);
+    assert_eq!(restored.window, src.window);
+    assert_eq!(restored.update(3.0), src.update(3.0));
 }

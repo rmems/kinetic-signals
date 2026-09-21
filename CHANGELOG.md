@@ -10,6 +10,11 @@ Crate version **0.5.0**.
 
 ### Fixed
 
+- Snapshot restore now enforces the same `1..=MAX_SNAPSHOT_CAPACITY` bound as
+  `VolEstimator::new` for `VolEstimatorSnapshot`, rejects SMA declared
+  `capacity` above `MAX_SNAPSHOT_CAPACITY` before reserving the window,
+  rejects EMA smoothing factors outside `(0, 2]` atomically, and reserves an
+  SMA snapshot's declared capacity before restoring its occupied window.
 - Public numerical APIs now treat non-finite inputs (`NaN`, `±Inf`) and ill-conditioned windows (constant / near-constant, near-zero variance, non-monotonic Hawkes times) as documented finite sentinels instead of propagating accidental `NaN` or `Inf`.
 - `compute_hurst` no longer reports `h = 0` (antipersistent) for a NaN series: `f64::max` was swallowing NaN during the `[0, 1]` clamp. Constant and non-finite series now use the existing underdetermined sentinel `h = 0.5`.
 - `compute_signal_stats` accumulates the mean with Welford's method; `SMA` recomputes the window mean with Welford after each accepted sample; `VolEstimator::rms` squares in `f64` before clamping.
@@ -31,7 +36,13 @@ Crate version **0.5.0**.
 
 ### Breaking
 
-- Bumped the crate version to `0.5.0` for new inherent methods (`snapshot`, `restore`, `from_snapshot`) and prelude-exported snapshot types / `serde` feature, per the pre-1.0 SemVer policy. Estimator math and existing method signatures are unchanged.
+- Bumped the crate version to `0.5.0` for new inherent methods (`snapshot`, `restore`, `from_snapshot`) and prelude-exported snapshot types / `serde` feature, per the pre-1.0 SemVer policy. Estimator math and existing method signatures are unchanged aside from the `VolEstimator::new` capacity ceiling below.
+- `VolEstimator::new` now panics when `capacity > MAX_SNAPSHOT_CAPACITY`
+  (`1_000_000`, about 4 MiB of `f32` samples). Previously the constructor
+  accepted any positive window. This tighter public precondition is an
+  intentional 0.5.0 breaking change so live construction and untrusted
+  restore share one allocation ceiling. Callers that need a larger ring
+  must stay on 0.4.x or split the window.
 - The prelude glob now also exports `compute_surprise_sequence_into`,
   `compute_shannon_entropy_into`, and `surprise_sequence_len`. Downstream
   `use kinetic_signals::prelude::*` combined with another glob that already

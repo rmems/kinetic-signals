@@ -177,7 +177,11 @@ Stateful streaming estimators (`VolEstimator`, `EMA`, `SMA`) expose
 validates window sizes, sample counts, and finiteness, and leaves the
 destination unchanged on failure (`SnapshotError`). `VolEstimator`
 snapshots store the physical ring (not oldest-first) so `f32` RMS order
-is preserved; `SMA` snapshots store the Welford-derived window sum.
+is preserved and accept capacities in `1..=MAX_SNAPSHOT_CAPACITY`, matching
+its constructor (`1_000_000` `f32` samples is about 4 MiB);
+`EMA` snapshots require a finite smoothing factor in `(0, 2]`; and `SMA`
+restore rejects declared `capacity` above `MAX_SNAPSHOT_CAPACITY` before
+reserving the window, then restores its Welford-derived window sum.
 
 Processing segment A, snapshotting, restoring, then segment B matches
 processing A+B continuously within `RESTORE_OUTPUT_TOLERANCE` (`1e-6`).
@@ -216,6 +220,7 @@ Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf
 | `EMA::update` / `SMA::update` | non-finite sample | state unchanged; current value returned (`0` if uninitialized / empty) |
 | `SMA::new` | `capacity == 0` | construction succeeds; `update` is a no-op returning `0.0` |
 | `VolEstimator::new` | `capacity == 0` | panic (`capacity must be > 0`) |
+| `VolEstimator::new` | `capacity > MAX_SNAPSHOT_CAPACITY` (`1_000_000`, ≈ 4 MiB of `f32`) | panic (`capacity must be <= MAX_SNAPSHOT_CAPACITY`); intentional 0.5.0 break vs unbounded 0.4.x constructors |
 | `ZScore::compute` | non-finite argument, `std_dev ≤ 1e-12`, or overflowing quotient | `0.0` |
 
 Shared-vector goldens are unchanged: the sentinels apply only to invalid or degenerate inputs, not to the finite fixture histories.
@@ -232,8 +237,13 @@ Typical execution times (Ryzen 9 9950X):
 ## Upgrading from v0.4.x
 
 v0.5.0 adds buffer-reuse APIs and snapshot/restore APIs. Existing
-allocating functions, estimator constructors, `push` / `update`, and batch
-functions are unchanged.
+allocating functions, `push` / `update`, and batch functions are unchanged.
+
+`VolEstimator::new` now panics if `capacity` exceeds `MAX_SNAPSHOT_CAPACITY`
+(`1_000_000`, about 4 MiB of `f32` samples). Windows larger than that
+compiled and ran on 0.4.x; the ceiling is an intentional 0.5.0 breaking
+change so construction matches snapshot restore. `SMA::new` is still
+unbounded; only SMA restore rejects an over-limit declared capacity.
 
 The new names are also exported by `prelude`:
 

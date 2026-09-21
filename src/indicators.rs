@@ -11,7 +11,7 @@
 
 use crate::numeric::{finite_or_zero, stable_mean};
 use crate::snapshot::{
-    EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError, clone_f64_slice,
+    EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError, clone_f64_slice_at_capacity,
     sma_canonical_sum,
 };
 
@@ -36,7 +36,7 @@ use crate::snapshot::{
 pub struct EMA {
     /// Current EMA value.
     pub value: f64,
-    /// Smoothing factor \(\alpha \in (0, 1]\).
+    /// Smoothing factor \(\alpha \in (0, 2]\).
     pub alpha: f64,
     /// Whether at least one sample has been observed.
     pub initialized: bool,
@@ -231,7 +231,7 @@ impl SMA {
     pub fn from_snapshot(snapshot: &SMASnapshot) -> Result<Self, SnapshotError> {
         snapshot.validate()?;
         Ok(Self {
-            window: clone_f64_slice(&snapshot.window)?,
+            window: clone_f64_slice_at_capacity(&snapshot.window, snapshot.capacity)?,
             capacity: snapshot.capacity,
             sum: sma_canonical_sum(&snapshot.window),
         })
