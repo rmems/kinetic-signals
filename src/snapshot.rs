@@ -32,6 +32,12 @@ pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
 /// estimator against one that was snapshotted and restored between segments.
 pub const RESTORE_OUTPUT_TOLERANCE: f64 = 1e-6;
 
+/// Upper bound on the window-length multiplier used when comparing a stored
+/// SMA sum to the canonical recomputation. Unbounded `len` scaling lets a
+/// large (but valid) window accept a completely mismatched sum, and can
+/// overflow the tolerance to infinity.
+const SMA_SUM_TOLERANCE_LEN_CAP: f64 = 64.0;
+
 /// Failure when reconstructing an estimator from a snapshot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -235,9 +241,9 @@ impl SMASnapshot {
     /// Check version, capacity, length, finiteness, and Welford-derived sum.
     ///
     /// The stored `sum` is compared against the canonical recomputation with
-    /// a tolerance scaled by magnitude and window length (base
-    /// [`RESTORE_OUTPUT_TOLERANCE`], so benign rounding drift validates
-    /// while genuine inconsistencies are rejected.
+    /// a tolerance scaled by the canonical magnitude and a *capped* window
+    /// length (base [`RESTORE_OUTPUT_TOLERANCE`]). An empty window requires
+    /// an exact zero `sum` — there is no rounding drift to tolerate.
     pub fn validate(&self) -> Result<(), SnapshotError> {
         check_version(self.schema_version)?;
         if self.capacity > MAX_SNAPSHOT_CAPACITY {
@@ -250,13 +256,22 @@ impl SMASnapshot {
             require_finite_f64(x)?;
         }
         require_finite_f64(self.sum)?;
+        // An empty window has no recomputation drift: require an exact zero.
+        if self.window.is_empty() {
+            if self.sum != 0.0 {
+                return Err(SnapshotError::InconsistentState);
+            }
+            return Ok(());
+        }
         // Bit-exact comparison is too strict: the stored Welford-derived sum
         // and `sma_canonical_sum` (stable mean times count) can differ by
-        // benign rounding drift. Compare with a tolerance scaled by magnitude
-        // and window length instead, still rejecting genuine inconsistencies.
+        // benign rounding drift. Scale by the *canonical* magnitude only
+        // (a huge stored `sum` must not inflate the allowance) and cap the
+        // length factor so large windows cannot accept mismatched totals.
         let canonical = sma_canonical_sum(&self.window);
-        let scale = self.sum.abs().max(canonical.abs()).max(1.0);
-        let tolerance = RESTORE_OUTPUT_TOLERANCE * scale * self.window.len().max(1) as f64;
+        let scale = canonical.abs().max(1.0);
+        let len_scale = (self.window.len() as f64).min(SMA_SUM_TOLERANCE_LEN_CAP);
+        let tolerance = RESTORE_OUTPUT_TOLERANCE * scale * len_scale;
         if (self.sum - canonical).abs() > tolerance {
             return Err(SnapshotError::InconsistentState);
         }
@@ -344,6 +359,19 @@ mod tests {
             capacity: 3,
             window: vec![],
             sum: 1.0,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+    }
+
+    #[test]
+    fn sma_snapshot_rejects_empty_window_with_sub_tolerance_nonzero_sum() {
+        // Without an exact-zero empty-window check, `len().max(1)` grants a
+        // 1e-6 absolute allowance and this sum would wrongly validate.
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: 3,
+            window: vec![],
+            sum: 1e-9,
         };
         assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
     }
@@ -443,5 +471,34 @@ mod tests {
         };
         assert_ne!(snap.sum, canonical);
         assert_eq!(snap.validate(), Ok(()));
+    }
+
+    #[test]
+    fn sma_snapshot_rejects_mismatched_sum_on_capped_large_window() {
+        // Uncapped `tolerance *= window.len()` accepts sum=0 for a full
+        // 1_000_000-wide window of ones (tolerance equals the canonical
+        // total). The length cap must reject that mismatch.
+        let window = vec![1.0; MAX_SNAPSHOT_CAPACITY];
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: MAX_SNAPSHOT_CAPACITY,
+            window,
+            sum: 0.0,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
+    }
+
+    #[test]
+    fn sma_snapshot_rejects_max_sum_on_large_zero_window() {
+        // Deriving scale from the stored sum lets `f64::MAX` overflow the
+        // tolerance to infinity. Scale from the canonical total only.
+        let window = vec![0.0; MAX_SNAPSHOT_CAPACITY];
+        let snap = SMASnapshot {
+            schema_version: SNAPSHOT_SCHEMA_VERSION,
+            capacity: MAX_SNAPSHOT_CAPACITY,
+            window,
+            sum: f64::MAX,
+        };
+        assert_eq!(snap.validate(), Err(SnapshotError::InconsistentState));
     }
 }
