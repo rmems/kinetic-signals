@@ -15,6 +15,9 @@ Crate version **0.5.0**.
   `capacity` above `MAX_SNAPSHOT_CAPACITY` before reserving the window,
   rejects EMA smoothing factors outside `(0, 2]` atomically, and reserves an
   SMA snapshot's declared capacity before restoring its occupied window.
+  `SMASnapshot::validate` compares the stored sum to the Welford-derived
+  total with a magnitude-scaled tolerance whose window-length factor is
+  capped, and requires an exact zero sum when the window is empty.
 - Public numerical APIs now treat non-finite inputs (`NaN`, `±Inf`) and ill-conditioned windows (constant / near-constant, near-zero variance, non-monotonic Hawkes times) as documented finite sentinels instead of propagating accidental `NaN` or `Inf`.
 - `compute_hurst` no longer reports `h = 0` (antipersistent) for a NaN series: `f64::max` was swallowing NaN during the `[0, 1]` clamp. Constant and non-finite series now use the existing underdetermined sentinel `h = 0.5`.
 - `compute_signal_stats` accumulates the mean with Welford's method; `SMA` recomputes the window mean with Welford after each accepted sample; `VolEstimator::rms` squares in `f64` before clamping.
@@ -111,9 +114,9 @@ After approval and upload:
 
 1. Verify the crate page and metadata on [crates.io](https://crates.io/crates/kinetic-signals).
 2. Verify the published version builds and renders on [docs.rs](https://docs.rs/kinetic-signals).
-3. Create and push the exact `v0.4.0` tag.
-4. Create the GitHub Release from this `0.4.0` entry, without diverging release notes.
-5. Change README installation guidance to `kinetic-signals = "0.4"` only after the registry version is live.
+3. Create and push the exact `v0.5.0` tag.
+4. Create the GitHub Release from the `[Unreleased]` `0.5.0` entry, without diverging release notes.
+5. Change README installation guidance to `kinetic-signals = "0.5"` only after the registry version is live.
 6. Observability release integration is owned by consuming applications; no
    crate-side release gate remains.
 
