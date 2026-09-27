@@ -104,9 +104,7 @@ cargo run --example demo
   the current open milestone (`kinetic-signals — active`). `issue_write` sets these
   for issues; PRs need `gh pr edit --add-assignee/--add-label/--milestone` since
   `create_pull_request`/`update_pull_request` have no fields for any of them.
-- **Commits:** Every commit carries the standing attribution trailer
-  (`Co-Authored-By: Claude ... <noreply@anthropic.com>` or the equivalent for whichever
-  model authored it) — including the first commit on a new branch.
+- **Commits:** Do not add Claude/Anthropic `Co-Authored-By` trailers or "Generated with Claude Code" lines. When Cursor Agent authors or co-authors a commit, it carries `Co-authored-by: Cursor Agent <cursoragent@cursor.com>` and no Grok trailer. A Grok trailer is added only when a Grok bot authors a commit without Cursor.
 - Full detail, verification commands, and the reasoning behind each of these: the
   `github-issue-pr-hygiene` global Claude Code skill.
 
