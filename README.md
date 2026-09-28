@@ -180,8 +180,12 @@ snapshots store the physical ring (not oldest-first) so `f32` RMS order
 is preserved and accept capacities in `1..=MAX_SNAPSHOT_CAPACITY`, matching
 its constructor (`1_000_000` `f32` samples is about 4 MiB);
 `EMA` snapshots require a finite smoothing factor in `(0, 2]`; and `SMA`
-restore rejects declared `capacity` above `MAX_SNAPSHOT_CAPACITY` before
-reserving the window, then restores its Welford-derived window sum.
+construction and restore share the single range
+`0..=MAX_SNAPSHOT_CAPACITY` (`1_000_000` `f64` samples is about 8 MiB): a
+zero capacity is a valid no-op estimator, while a declared `capacity` above
+the ceiling is rejected (`SMA::new` panics, restore returns a `SnapshotError`)
+before the window is reserved. A restore that fails validation for any reason
+leaves the destination estimator unchanged.
 
 Processing segment A, snapshotting, restoring, then segment B matches
 processing A+B continuously within `RESTORE_OUTPUT_TOLERANCE` (`1e-6`).
@@ -219,6 +223,7 @@ Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf
 | `VolEstimator::push` / `rms` | non-finite push; empty window | push ignored; empty `rms = 0`; output clamped to `[0, 1]` |
 | `EMA::update` / `SMA::update` | non-finite sample | state unchanged; current value returned (`0` if uninitialized / empty) |
 | `SMA::new` | `capacity == 0` | construction succeeds; `update` is a no-op returning `0.0` |
+| `SMA::new` | `capacity > MAX_SNAPSHOT_CAPACITY` (`1_000_000`, ≈ 8 MiB of `f64`) | panic (`capacity must be <= MAX_SNAPSHOT_CAPACITY`); intentional 0.5.0 break vs unbounded 0.4.x constructor |
 | `VolEstimator::new` | `capacity == 0` | panic (`capacity must be > 0`) |
 | `VolEstimator::new` | `capacity > MAX_SNAPSHOT_CAPACITY` (`1_000_000`, ≈ 4 MiB of `f32`) | panic (`capacity must be <= MAX_SNAPSHOT_CAPACITY`); intentional 0.5.0 break vs unbounded 0.4.x constructors |
 | `ZScore::compute` | non-finite argument, `std_dev ≤ 1e-12`, or overflowing quotient | `0.0` |
@@ -242,8 +247,11 @@ allocating functions, `push` / `update`, and batch functions are unchanged.
 `VolEstimator::new` now panics if `capacity` exceeds `MAX_SNAPSHOT_CAPACITY`
 (`1_000_000`, about 4 MiB of `f32` samples). Windows larger than that
 compiled and ran on 0.4.x; the ceiling is an intentional 0.5.0 breaking
-change so construction matches snapshot restore. `SMA::new` is still
-unbounded; only SMA restore rejects an over-limit declared capacity.
+change so construction matches snapshot restore. `SMA::new` now panics if
+`capacity` exceeds `MAX_SNAPSHOT_CAPACITY` (`1_000_000`, about 8 MiB of `f64`
+samples), matching VolEstimator and SMA snapshot restore; capacity `0` is
+still valid (a no-op estimator). Callers that need a larger window must stay
+on 0.4.x or split the window into multiple smaller SMAs.
 
 The new names are also exported by `prelude`:
 

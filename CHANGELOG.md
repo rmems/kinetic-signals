@@ -11,8 +11,10 @@ Crate version **0.5.0**.
 ### Fixed
 
 - Snapshot restore now enforces the same `1..=MAX_SNAPSHOT_CAPACITY` bound as
-  `VolEstimator::new` for `VolEstimatorSnapshot`, rejects SMA declared
-  `capacity` above `MAX_SNAPSHOT_CAPACITY` before reserving the window,
+  `VolEstimator::new` for `VolEstimatorSnapshot`, enforces the SMA
+  `0..=MAX_SNAPSHOT_CAPACITY` range shared by `SMA::new` and restore by
+  rejecting a declared `capacity` above `MAX_SNAPSHOT_CAPACITY` before
+  reserving the window,
   rejects EMA smoothing factors outside `(0, 2]` atomically, and reserves an
   SMA snapshot's declared capacity before restoring its occupied window.
   `SMASnapshot::validate` compares the stored sum to the Welford-derived
@@ -22,7 +24,7 @@ Crate version **0.5.0**.
 - `compute_hurst` no longer reports `h = 0` (antipersistent) for a NaN series: `f64::max` was swallowing NaN during the `[0, 1]` clamp. Constant and non-finite series now use the existing underdetermined sentinel `h = 0.5`.
 - `compute_signal_stats` accumulates the mean with Welford's method; `SMA` recomputes the window mean with Welford after each accepted sample; `VolEstimator::rms` squares in `f64` before clamping.
 - Overflow of finite extreme magnitudes (second moments, Hawkes excitation sums, surprise `mu * dt`, z-score quotients, Hurst R/S) now yields the same documented empty/underdetermined sentinels instead of `Inf` results with a normal-looking count or a clamped false Hurst.
-- `SMA::new(0)` remains constructible (a no-op `update`) so this is not a breaking constructor panic. Hawkes streaming preserves finite decay state when a tick or parameter is invalid, and batch/streaming both reject non-monotonic event times instead of disagreeing.
+- `SMA::new(0)` remains constructible (a no-op `update`), so zero capacity is not the breaking constructor panic; only a `capacity` above `MAX_SNAPSHOT_CAPACITY` now panics (see the Breaking section). Hawkes streaming preserves finite decay state when a tick or parameter is invalid, and batch/streaming both reject non-monotonic event times instead of disagreeing.
 
 ### Added
 
@@ -46,6 +48,13 @@ Crate version **0.5.0**.
   intentional 0.5.0 breaking change so live construction and untrusted
   restore share one allocation ceiling. Callers that need a larger ring
   must stay on 0.4.x or split the window.
+- `SMA::new` now panics when `capacity > MAX_SNAPSHOT_CAPACITY`
+  (`1_000_000`, about 8 MiB of `f64` samples). Previously the constructor
+  accepted any capacity. This tighter public precondition is an intentional
+  0.5.0 breaking change so live construction and SMA snapshot restore share
+  one allocation ceiling. `capacity == 0` remains supported (a no-op
+  estimator whose `update` returns `0.0`). Callers that need a larger window
+  must stay on 0.4.x or split the window into multiple smaller SMAs.
 - The prelude glob now also exports `compute_surprise_sequence_into`,
   `compute_shannon_entropy_into`, and `surprise_sequence_len`. Downstream
   `use kinetic_signals::prelude::*` combined with another glob that already

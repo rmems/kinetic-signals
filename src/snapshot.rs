@@ -20,12 +20,14 @@ use crate::numeric::{finite_or_zero, stable_mean};
 /// [`crate::EMA::snapshot`], and [`crate::SMA::snapshot`].
 pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 
-/// Largest supported window capacity for [`crate::VolEstimator`] construction
-/// and restore, and for [`crate::SMA`] snapshot restore.
+/// Largest supported window capacity for [`crate::VolEstimator`] and
+/// [`crate::SMA`] construction and snapshot restore.
 ///
-/// `1_000_000` `f32` samples is about 4 MiB. Bounding capacity keeps an
-/// externally supplied snapshot from requesting an unbounded allocation
-/// during restore (`VolEstimator` ring and declared `SMA` window capacity).
+/// `1_000_000` samples is about 4 MiB as `f32` (`VolEstimator`) or 8 MiB as
+/// `f64` (`SMA`). Bounding capacity keeps an externally supplied snapshot from
+/// requesting an unbounded allocation during restore (`VolEstimator` ring and
+/// declared `SMA` window capacity), and caps the reservation a constructor
+/// makes for the same window.
 pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
 
 /// Absolute error bound for comparing outputs of a continuously processed
@@ -221,8 +223,10 @@ impl EMASnapshot {
 /// `window` is oldest-first. `sum` must match the Welford-derived total
 /// [`crate::SMA::update`] stores (window mean times count, or `0.0` when
 /// empty). Capacity `0` is valid when `window` is empty and `sum` is `0.0`,
-/// matching [`crate::SMA::new`]. Restore rejects `capacity` above
-/// [`MAX_SNAPSHOT_CAPACITY`] before reserving the declared buffer.
+/// matching [`crate::SMA::new`]. SMA construction and restore share one
+/// capacity ceiling, `0..=`[`MAX_SNAPSHOT_CAPACITY`]: restore rejects
+/// `capacity` above it before reserving the declared buffer, just as the
+/// constructor panics above it.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SMASnapshot {
