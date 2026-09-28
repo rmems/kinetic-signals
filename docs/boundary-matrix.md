@@ -20,6 +20,18 @@ Domain-agnostic streaming feature extraction for stochastic signals. Computes re
 | Indicators | EMA, SMA, Z-score tracking |
 | Signal stats | High-order moments (skewness, kurtosis) |
 
+## Capacity boundaries
+
+`SMA` construction (`SMA::new`) and snapshot restore share one declared-capacity
+range, `0..=MAX_SNAPSHOT_CAPACITY` (`1_000_000`). Both entry points enforce the
+same boundaries:
+
+| Declared capacity | Construction (`SMA::new`) | Restore (`SMASnapshot`) |
+|-------------------|---------------------------|-------------------------|
+| `0` | valid; no-op estimator (`update` returns `0.0`) | valid; no-op estimator round-trips |
+| `== MAX_SNAPSHOT_CAPACITY` | valid | valid |
+| `> MAX_SNAPSHOT_CAPACITY` | panics (`capacity must be <= MAX_SNAPSHOT_CAPACITY`) | returns `SnapshotError::InvalidCapacity` before reserving the window |
+
 ## Does NOT own
 
 | Area | Belongs to |

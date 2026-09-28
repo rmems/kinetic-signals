@@ -287,6 +287,65 @@ fn snapshot_sma_rejects_huge_capacity_with_small_window_without_reserving() {
 }
 
 #[test]
+#[should_panic(expected = "capacity must be <= MAX_SNAPSHOT_CAPACITY")]
+fn sma_new_capacity_above_snapshot_limit_panics() {
+    let _ = SMA::new(MAX_SNAPSHOT_CAPACITY + 1);
+}
+
+#[test]
+fn sma_new_zero_capacity_update_is_noop() {
+    let mut sma = SMA::new(0);
+    assert_eq!(sma.capacity, 0);
+    assert_eq!(sma.update(1.0), 0.0);
+    assert!(sma.window.is_empty());
+    assert_eq!(sma.sum, 0.0);
+}
+
+#[test]
+fn sma_new_ceiling_capacity_constructs() {
+    let sma = SMA::new(MAX_SNAPSHOT_CAPACITY);
+    assert_eq!(sma.capacity, MAX_SNAPSHOT_CAPACITY);
+    assert!(sma.window.capacity() >= MAX_SNAPSHOT_CAPACITY);
+    assert!(sma.window.is_empty());
+}
+
+#[test]
+fn snapshot_sma_large_valid_capacity_round_trips() {
+    let mut sma = SMA::new(MAX_SNAPSHOT_CAPACITY);
+    sma.update(1.0);
+    sma.update(2.0);
+
+    let restored = SMA::from_snapshot(&sma.snapshot()).unwrap();
+
+    assert_eq!(restored.capacity, MAX_SNAPSHOT_CAPACITY);
+    assert!(restored.window.capacity() >= MAX_SNAPSHOT_CAPACITY);
+    assert_eq!(restored.window, vec![1.0, 2.0]);
+}
+
+#[test]
+fn snapshot_sma_rejects_capacity_one_above_limit_without_mutating() {
+    let mut sma = SMA::new(2);
+    sma.update(1.0);
+    let before = sma.clone();
+    let oversized = SMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: MAX_SNAPSHOT_CAPACITY + 1,
+        window: vec![],
+        sum: 0.0,
+    };
+
+    assert_eq!(oversized.validate(), Err(SnapshotError::InvalidCapacity));
+    assert!(matches!(
+        SMA::from_snapshot(&oversized),
+        Err(SnapshotError::InvalidCapacity)
+    ));
+    assert_eq!(sma.restore(&oversized), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(sma.capacity, before.capacity);
+    assert_eq!(sma.window, before.window);
+    assert_eq!(sma.sum, before.sum);
+}
+
+#[test]
 fn snapshot_restore_rejects_invalid_length_and_non_finite_without_mutating() {
     let mut vol = VolEstimator::new(2);
     vol.push(0.1);
@@ -464,4 +523,59 @@ fn snapshot_serde_roundtrip_preserves_sma_window_and_capacity() {
     assert!(restored.window.capacity() >= 8);
     assert_eq!(restored.window, src.window);
     assert_eq!(restored.update(3.0), src.update(3.0));
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn snapshot_serde_roundtrip_preserves_sma_zero_capacity() {
+    let src = SMA::new(0);
+
+    let json = serde_json::to_string(&src.snapshot()).unwrap();
+    let decoded: SMASnapshot = serde_json::from_str(&json).unwrap();
+    let restored = SMA::from_snapshot(&decoded).unwrap();
+
+    assert_eq!(restored.capacity, 0);
+    assert!(restored.window.is_empty());
+    assert_eq!(restored.sum, 0.0);
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn snapshot_serde_roundtrip_preserves_sma_ceiling_capacity() {
+    let mut src = SMA::new(MAX_SNAPSHOT_CAPACITY);
+    src.update(1.0);
+    src.update(2.0);
+
+    let json = serde_json::to_string(&src.snapshot()).unwrap();
+    let decoded: SMASnapshot = serde_json::from_str(&json).unwrap();
+    let mut restored = SMA::from_snapshot(&decoded).unwrap();
+
+    assert_eq!(restored.capacity, MAX_SNAPSHOT_CAPACITY);
+    assert!(restored.window.capacity() >= MAX_SNAPSHOT_CAPACITY);
+    assert_eq!(restored.window, src.window);
+    assert_eq!(restored.update(3.0), src.update(3.0));
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn snapshot_serde_over_limit_payload_deserializes_but_restore_rejects() {
+    let oversized = SMASnapshot {
+        schema_version: SNAPSHOT_SCHEMA_VERSION,
+        capacity: MAX_SNAPSHOT_CAPACITY + 1,
+        window: vec![],
+        sum: 0.0,
+    };
+
+    let json = serde_json::to_string(&oversized).unwrap();
+    let decoded: SMASnapshot = serde_json::from_str(&json).unwrap();
+    assert_eq!(decoded.capacity, MAX_SNAPSHOT_CAPACITY + 1);
+
+    let mut dest = SMA::new(2);
+    dest.update(1.0);
+    let before = dest.clone();
+
+    assert_eq!(dest.restore(&decoded), Err(SnapshotError::InvalidCapacity));
+    assert_eq!(dest.capacity, before.capacity);
+    assert_eq!(dest.window, before.window);
+    assert_eq!(dest.sum, before.sum);
 }

@@ -11,8 +11,8 @@
 
 use crate::numeric::{finite_or_zero, stable_mean};
 use crate::snapshot::{
-    EMASnapshot, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError, clone_f64_slice_at_capacity,
-    sma_canonical_sum,
+    EMASnapshot, MAX_SNAPSHOT_CAPACITY, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError,
+    clone_f64_slice_at_capacity, sma_canonical_sum,
 };
 
 /// Exponential moving average (EMA) for streaming data.
@@ -143,6 +143,15 @@ impl ZScore {
 /// after each accepted sample so add/remove drift cannot accumulate.
 /// Non-finite samples are ignored.
 ///
+/// Construction and snapshot restore share one capacity range,
+/// `0..=`[`MAX_SNAPSHOT_CAPACITY`](crate::MAX_SNAPSHOT_CAPACITY): both accept a
+/// zero-capacity (no-op) estimator and reject anything above the ceiling.
+/// [`snapshot`](SMA::snapshot) then [`restore`](SMA::restore) reproduces state
+/// so subsequent [`update`](SMA::update) outputs match a continuously
+/// processed estimator within [`crate::RESTORE_OUTPUT_TOLERANCE`], and a failed
+/// restore leaves `self` unchanged. Because `window`, `capacity`, and `sum` are
+/// public, a caller who mutates them directly bypasses that range guarantee.
+///
 /// # Example
 ///
 /// ```rust
@@ -169,7 +178,19 @@ impl SMA {
     ///
     /// `capacity == 0` is retained for compatibility: construction succeeds
     /// and [`update`](SMA::update) is a no-op that returns `0.0`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `capacity` exceeds
+    /// [`crate::MAX_SNAPSHOT_CAPACITY`] (`1_000_000`, about 8 MiB of `f64`
+    /// samples). Construction shares that single allocation ceiling with SMA
+    /// snapshot restore. The upper bound is an intentional v0.5.0 breaking
+    /// change relative to the previously unbounded constructor.
     pub fn new(capacity: usize) -> Self {
+        assert!(
+            capacity <= MAX_SNAPSHOT_CAPACITY,
+            "capacity must be <= MAX_SNAPSHOT_CAPACITY"
+        );
         Self {
             window: Vec::with_capacity(capacity),
             capacity,
