@@ -25,6 +25,9 @@ serde_json = "1"
 default = []
 serde = ["dep:serde"]
 
+[package.metadata.docs.rs]
+features = ["serde"]
+
 [[bench]]
 name = "output_reuse"
 harness = false

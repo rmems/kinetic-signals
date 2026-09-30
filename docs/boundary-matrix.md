@@ -75,15 +75,7 @@ All public types are `Send + Sync`. `VolEstimator` requires `&mut self` for muta
 
 ## Domain leaks / migration risks
 
-- **Deprecated GBM aliases:** Planned for removal in v0.4.0 (PR #17). Once merged, the README migration table will also be removed.
-- **SpikeStream.jl transitional proxies:** SpikeStream.jl issues #8, #9, #11 reference financial proxy functions that pointed to kinetic-signals. These proxies should be updated to use the domain-agnostic names (`compute_surprise`, `SurpriseParams`) after v0.4.0.
+- **Deprecated GBM aliases:** Removed in 0.4.0. The README "Upgrading from v0.3.x" migration table documents the domain-agnostic replacements (`compute_surprise`, `SurpriseParams`, and so on).
+- **SpikeStream.jl transitional proxies:** SpikeStream.jl issues #8, #9, #11 reference financial proxy functions that pointed to kinetic-signals. These proxies should use the domain-agnostic names (`compute_surprise`, `SurpriseParams`).
 - Future domain-specific features (e.g., financial Greeks, spike ISI) should be added in consumer crates, not here.
 - If a feature is requested that requires domain knowledge, redirect to the appropriate consumer crate.
-
-## Sequencing
-
-1. PR #12 (dual-license) — merged
-2. PR #16 (README dev section) — open
-3. PR #17 (remove deprecated aliases) — open
-4. This document (PR #19) — open
-5. crates.io publishing — deferred until repo quality is satisfactory
