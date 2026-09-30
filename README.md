@@ -21,25 +21,36 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 
 ## Installation
 
-Before the first crates.io publication, use the repository dependency:
+The current published release on
+[crates.io](https://crates.io/crates/kinetic-signals) is `0.4.x`:
+
+```toml
+[dependencies]
+kinetic-signals = "0.4"
+```
+
+The published `0.4.x` release does **not** include the snapshot/restore APIs
+or the optional `serde` feature — those land in the upcoming `0.5.0`, which is
+not yet published. To use them today, depend on the unreleased `main` branch:
 
 ```toml
 [dependencies]
 kinetic-signals = { git = "https://github.com/rmems/kinetic-signals" }
 ```
 
-After `kinetic-signals 0.5.0` is published and verified on
-[crates.io](https://crates.io/crates/kinetic-signals), use the registry
-dependency:
+After `0.5.0` is published and verified on
+[crates.io](https://crates.io/crates/kinetic-signals), the registry
+dependency will become:
 
 ```toml
-[dependencies]
+# upcoming 0.5.0 — not yet published
 kinetic-signals = "0.5"
 ```
 
 See the [changelog](CHANGELOG.md#release-checklist) for the release history
-and reproducible publication gates. The crates.io and docs.rs destinations are
-prepared in advance and remain unverified until publication completes.
+and reproducible publication gates. The crates.io and docs.rs destinations for
+`0.5.0` are prepared in advance and remain unverified until publication
+completes.
 
 ## Usage
 
@@ -193,12 +204,17 @@ Non-finite `push`/`update` inputs are ignored by the live estimators and
 therefore do not appear in snapshots.
 
 The optional `serde` feature derives `Serialize` / `Deserialize` on snapshot
-types. Pair it with a format crate such as `serde_json` in the consuming
-application:
+types. Snapshots and the `serde` feature ship in the upcoming `0.5.0`; until it
+is published, depend on the unreleased `main` branch. Pair the feature with a
+format crate such as `serde_json` in the consuming application:
 
 ```toml
-kinetic-signals = { version = "0.5", features = ["serde"] }
+# unreleased main (snapshot + serde APIs)
+kinetic-signals = { git = "https://github.com/rmems/kinetic-signals", features = ["serde"] }
 serde_json = "1"
+
+# once 0.5.0 is published and verified on crates.io:
+# kinetic-signals = { version = "0.5", features = ["serde"] }
 ```
 
 ### Numeric input contract
@@ -288,7 +304,7 @@ v0.4.0 removes the deprecated GBM aliases. Replace with the domain-agnostic name
 Also remove `features = ["sentry"]` from the dependency declaration and
 delete any calls to `init_sentry()`. Observability setup now belongs in the
 consuming application rather than in this crate; see the migration notes in
-[`CHANGELOG.md`](CHANGELOG.md#040---unreleased).
+[`CHANGELOG.md`](CHANGELOG.md#040---2026-09-10).
 
 ## Pre-1.0 SemVer / Stability Policy
 
