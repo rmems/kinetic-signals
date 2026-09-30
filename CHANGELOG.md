@@ -10,6 +10,19 @@ Crate version **0.5.0**.
 
 ### Fixed
 
+- Both entropy entry points now define an explicit supported `bins` ceiling,
+  `MAX_ENTROPY_BINS` (`= MAX_SNAPSHOT_CAPACITY = 1_000_000`, about 8 MiB of
+  `usize` counts, matching the `SMA` / `VolEstimator` allocation rationale).
+  A request above the ceiling is rejected before any resize with the existing
+  zeroed sentinel (`bin_count == 0`), and `compute_shannon_entropy_into`
+  clears the caller buffer (`len == 0`, capacity retained), the same as the
+  other degenerate entropy branches; previously a caller-controlled `bins`
+  such as `usize::MAX` on non-degenerate input attempted an unbounded
+  histogram allocation with no policy. The requested resolution is never
+  silently reduced, and all behavior for valid `bins` (`1..=MAX_ENTROPY_BINS`),
+  including buffer reuse and every finite / non-finite / overflow / constant
+  sentinel, is unchanged. The allocating wrapper delegates to the core, so
+  both entry points share the policy.
 - The Hawkes zero-decay contract is now explicit and consistent across
   batch, streaming, docs, and tests. `beta >= 0` is the accepted contract;
   `beta == 0` (including `-0.0`) is the non-decaying limit whose decay factor
@@ -50,6 +63,10 @@ Crate version **0.5.0**.
   behaviorally identical. Buffer length, overwrite, capacity retention, and
   aliasing are documented on the new APIs and in the README.
   `surprise_sequence_len` is the output-length contract for surprise sequences.
+- `MAX_ENTROPY_BINS` (re-exported from the crate root): the supported ceiling
+  for histogram `bins` on the entropy entry points, aliased to
+  `MAX_SNAPSHOT_CAPACITY` (`1_000_000`). This is an additive, non-breaking
+  public item; no existing behavior for valid `bins` changed.
 - Crate- and per-API documentation of the finite-input / finite-output contract, plus regression and property tests for constant, near-constant, extreme finite, NaN, and `±Inf` cases. Batch Hawkes intensity is asserted to match the streaming post-event form `μ + α · decay_sum`.
 
 ### Breaking

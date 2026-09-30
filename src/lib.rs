@@ -63,7 +63,9 @@ pub mod stats;
 pub mod surprise;
 pub mod volatility;
 
-pub use entropy::{EntropyResult, compute_shannon_entropy, compute_shannon_entropy_into};
+pub use entropy::{
+    EntropyResult, MAX_ENTROPY_BINS, compute_shannon_entropy, compute_shannon_entropy_into,
+};
 pub use hawkes::{HawkesParams, HawkesResult, compute_hawkes, compute_hawkes_streaming};
 pub use hurst::{HurstResult, compute_hurst};
 pub use indicators::{EMA, SMA, ZScore};

@@ -87,13 +87,15 @@ the `*_into` APIs instead of allocating a new output on every window.
 | Path | Allocating wrapper | Reuse API | Output length |
 |------|--------------------|-----------|---------------|
 | Surprise sequence | `compute_surprise_sequence` | `compute_surprise_sequence_into` | `surprise_sequence_len(n)` = `n.saturating_sub(1)` |
-| Shannon entropy histogram | `compute_shannon_entropy` | `compute_shannon_entropy_into` | `bins` on a non-degenerate input; `0` otherwise |
+| Shannon entropy histogram | `compute_shannon_entropy` | `compute_shannon_entropy_into` | `bins` on a non-degenerate, in-policy input; `0` otherwise |
 
 Both wrappers delegate to the `*_into` core, so results are identical.
 
 **Overwrite / resize:** each `_into` call **resizes** the buffer to the
-current window's output length (entropy **clears** on degenerate inputs),
-then **overwrites** every slot. Capacity is never shrunk. A buffer whose
+current window's output length (entropy **clears** on degenerate inputs, and
+also on an out-of-policy `bins` greater than `MAX_ENTROPY_BINS` =
+`MAX_SNAPSHOT_CAPACITY` = `1_000_000`, before any allocation), then
+**overwrites** every slot. Capacity is never shrunk. A buffer whose
 `capacity()` is already large enough performs **no output allocation** in
 steady state.
 
@@ -218,6 +220,7 @@ Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf
 | `compute_surprise` | `sigma ≤ 0` with valid positive samples | `z_score = surprise = 0`; `log_return` still reported |
 | `detect_anomaly` | non-finite surprise or threshold | `false` (not an anomaly) |
 | `compute_shannon_entropy` | `len < 2`, `bins == 0`, any non-finite sample, overflowed `max - min` range | zeroed result (`bin_count = 0`) |
+| `compute_shannon_entropy` / `compute_shannon_entropy_into` | `bins > MAX_ENTROPY_BINS` (`= MAX_SNAPSHOT_CAPACITY = 1_000_000`, ≈ 8 MiB of `usize`) | out of policy: zeroed result (`bin_count = 0`) before any allocation; `*_into` buffer is cleared (`len == 0`, capacity retained); resolution is not silently reduced |
 | `compute_shannon_entropy` | constant series (`max == min`) | `shannon = 0`, `bin_count = 1` |
 | `compute_signal_stats` | empty slice, any non-finite sample, or overflowing second moment | all zeros, `count = 0` |
 | `compute_signal_stats` | constant / near-zero variance | `skewness = kurtosis = 0` |
