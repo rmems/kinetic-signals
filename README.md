@@ -83,6 +83,18 @@ let mut vol = VolEstimator::new(64);
 vol.push(0.01);
 vol.push(0.02);
 println!("RMS vol = {:.4}", vol.rms());
+```
+
+Snapshot / restore is new in the upcoming `0.5.0` (unreleased; use the `main`
+git dependency from [Installation](#installation) until it is published) and is
+not available on the published `0.4.x` release:
+
+```rust
+use kinetic_signals::VolEstimator;
+
+let mut vol = VolEstimator::new(64);
+vol.push(0.01);
+vol.push(0.02);
 
 // Snapshot / restore — checkpoint a rolling window and resume
 let snap = vol.snapshot();
@@ -94,6 +106,10 @@ resumed.push(0.015);
 
 High-frequency telemetry loops can keep a caller-owned `Vec` and pass it to
 the `*_into` APIs instead of allocating a new output on every window.
+
+> The `*_into` buffer-reuse APIs are new in the upcoming `0.5.0` (unreleased;
+> use the `main` git dependency from [Installation](#installation) until it is
+> published) and are not available on the published `0.4.x` release.
 
 | Path | Allocating wrapper | Reuse API | Output length |
 |------|--------------------|-----------|---------------|
