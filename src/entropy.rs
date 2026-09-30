@@ -13,6 +13,19 @@
 //! caller-owned buffer so successive windows can reuse it.
 
 use crate::numeric::all_finite;
+use crate::snapshot::MAX_SNAPSHOT_CAPACITY;
+
+/// Supported ceiling for the histogram `bins` requested from the entropy
+/// entry points.
+///
+/// A request above this value is out of policy: the entropy functions return
+/// the zeroed sentinel instead of attempting an unbounded histogram
+/// allocation (see [`compute_shannon_entropy`] and
+/// [`compute_shannon_entropy_into`]). The ceiling reuses the crate-wide
+/// [`MAX_SNAPSHOT_CAPACITY`](crate::MAX_SNAPSHOT_CAPACITY) (`1_000_000`), a
+/// histogram of about 8 MiB of `usize` counts, matching the allocation
+/// rationale shared by `SMA::new` and `VolEstimator::new`.
+pub const MAX_ENTROPY_BINS: usize = MAX_SNAPSHOT_CAPACITY;
 
 /// Result of a Shannon entropy computation.
 #[derive(Debug, Clone)]
@@ -43,7 +56,19 @@ fn zero_entropy() -> EntropyResult {
 /// (finite values near opposite extremes) is treated the same way: equal-width
 /// bins are undefined, so the empty sentinel is returned (`bin_count == 0`).
 /// A constant (including near-constant with `max == min`) series yields zero
-/// entropy with `bin_count == 1`.
+/// entropy with `bin_count == 1`, provided `bins` is within policy.
+///
+/// # Resource policy
+///
+/// Supported `bins` are `1..=`[`MAX_ENTROPY_BINS`] (`1_000_000`). A request
+/// above that ceiling is out of policy and returns the zeroed sentinel
+/// (`bin_count == 0`) before any histogram allocation, rather than attempting
+/// an unbounded reservation. This rejection is applied before the
+/// constant-series branch, so an oversized `bins` yields `bin_count == 0` for
+/// every input distribution (including a constant series), never
+/// `bin_count == 1`. The requested resolution is rejected outright, never
+/// silently reduced. Because this wrapper delegates to
+/// [`compute_shannon_entropy_into`], both entry points share this policy.
 ///
 /// # Example
 ///
@@ -72,6 +97,11 @@ pub fn compute_shannon_entropy(data: &[f64], bins: usize) -> EntropyResult {
 ///   an overflowing min–max range, or a constant series) **clear** `histogram`
 ///   (`len == 0`) and return the same result as [`compute_shannon_entropy`].
 ///   Capacity is retained.
+/// - An out-of-policy `bins` (greater than [`MAX_ENTROPY_BINS`], `1_000_000`)
+///   is handled the same way **before** any resize: `histogram` is **cleared**
+///   (`len == 0`, capacity retained) and the zeroed sentinel is returned
+///   (`bin_count == 0`). The requested resolution is rejected, never silently
+///   reduced.
 /// - Otherwise `histogram` is resized to `bins` if needed, **zeroed**, then
 ///   overwritten with occupancy counts. After return, `histogram.len() == bins`
 ///   and `histogram[i]` is the count for bin `i`.
@@ -107,6 +137,11 @@ pub fn compute_shannon_entropy_into(
     histogram: &mut Vec<usize>,
 ) -> EntropyResult {
     if data.len() < 2 || bins == 0 || !all_finite(data) {
+        histogram.clear();
+        return zero_entropy();
+    }
+
+    if bins > MAX_ENTROPY_BINS {
         histogram.clear();
         return zero_entropy();
     }
@@ -241,9 +276,76 @@ mod tests {
         assert_eq!(empty.bin_count, 0);
         let short = compute_shannon_entropy(&[1.0], usize::MAX);
         assert_eq!(short.bin_count, 0);
-        let constant = compute_shannon_entropy(&[1.0, 1.0], usize::MAX);
-        assert_eq!(constant.bin_count, 1);
-        assert_eq!(constant.shannon, 0.0);
+        let constant_out_of_policy = compute_shannon_entropy(&[1.0, 1.0], usize::MAX);
+        assert_eq!(constant_out_of_policy.bin_count, 0);
+        assert_eq!(constant_out_of_policy.shannon, 0.0);
+    }
+
+    #[test]
+    fn test_entropy_bins_above_ceiling_on_constant_series_is_out_of_policy() {
+        let data = [1.0, 1.0, 1.0];
+
+        for &bins in &[MAX_ENTROPY_BINS + 1, usize::MAX] {
+            let mut histogram = vec![7usize; 5];
+            let res = compute_shannon_entropy_into(&data, bins, &mut histogram);
+            assert!(histogram.is_empty());
+            assert_eq!(res.bin_count, 0);
+            assert_eq!(res.shannon, 0.0);
+            assert_eq!(res.relative, 0.0);
+            assert_entropy_eq(&res, &compute_shannon_entropy(&data, bins));
+        }
+
+        let mut histogram = Vec::new();
+        let within = compute_shannon_entropy_into(&data, 4, &mut histogram);
+        assert_eq!(within.bin_count, 1);
+        assert_eq!(within.shannon, 0.0);
+        assert_entropy_eq(&within, &compute_shannon_entropy(&data, 4));
+    }
+
+    #[test]
+    fn test_entropy_bins_one_is_valid() {
+        let data = [1.0, 2.0, 3.0, 4.0];
+        let mut histogram = Vec::new();
+        let res = compute_shannon_entropy_into(&data, 1, &mut histogram);
+        assert_eq!(histogram.len(), 1);
+        assert_eq!(histogram[0], data.len());
+        assert_eq!(res.bin_count, 1);
+        assert_eq!(res.shannon, 0.0);
+        assert_entropy_eq(&res, &compute_shannon_entropy(&data, 1));
+    }
+
+    #[test]
+    fn test_entropy_bins_at_ceiling_allocates() {
+        let data = [1.0, 2.0, 3.0, 4.0];
+        let mut histogram = Vec::new();
+        let res = compute_shannon_entropy_into(&data, MAX_ENTROPY_BINS, &mut histogram);
+        assert_eq!(histogram.len(), MAX_ENTROPY_BINS);
+        assert_eq!(histogram.iter().sum::<usize>(), data.len());
+        assert!(res.shannon > 0.0);
+        assert_eq!(res.bin_count, data.len());
+    }
+
+    #[test]
+    fn test_entropy_bins_above_ceiling_is_out_of_policy() {
+        let data = [1.0, 2.0, 3.0, 4.0];
+        let mut histogram = vec![7usize; 5];
+        let res = compute_shannon_entropy_into(&data, MAX_ENTROPY_BINS + 1, &mut histogram);
+        assert!(histogram.is_empty());
+        assert_eq!(res.bin_count, 0);
+        assert_eq!(res.shannon, 0.0);
+        assert_eq!(res.relative, 0.0);
+        assert_entropy_eq(&res, &compute_shannon_entropy(&data, MAX_ENTROPY_BINS + 1));
+    }
+
+    #[test]
+    fn test_entropy_bins_usize_max_nondegenerate_is_out_of_policy() {
+        let data = [1.0, 2.0, 3.0, 4.0];
+        let mut histogram = vec![7usize; 5];
+        let res = compute_shannon_entropy_into(&data, usize::MAX, &mut histogram);
+        assert!(histogram.is_empty());
+        assert_eq!(res.bin_count, 0);
+        assert_eq!(res.shannon, 0.0);
+        assert_entropy_eq(&res, &compute_shannon_entropy(&data, usize::MAX));
     }
 
     #[test]

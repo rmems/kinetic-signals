@@ -87,13 +87,15 @@ the `*_into` APIs instead of allocating a new output on every window.
 | Path | Allocating wrapper | Reuse API | Output length |
 |------|--------------------|-----------|---------------|
 | Surprise sequence | `compute_surprise_sequence` | `compute_surprise_sequence_into` | `surprise_sequence_len(n)` = `n.saturating_sub(1)` |
-| Shannon entropy histogram | `compute_shannon_entropy` | `compute_shannon_entropy_into` | `bins` on a non-degenerate input; `0` otherwise |
+| Shannon entropy histogram | `compute_shannon_entropy` | `compute_shannon_entropy_into` | `bins` on a non-degenerate, in-policy input; `0` otherwise |
 
 Both wrappers delegate to the `*_into` core, so results are identical.
 
 **Overwrite / resize:** each `_into` call **resizes** the buffer to the
-current window's output length (entropy **clears** on degenerate inputs),
-then **overwrites** every slot. Capacity is never shrunk. A buffer whose
+current window's output length (entropy **clears** on degenerate inputs, and
+also on an out-of-policy `bins` greater than `MAX_ENTROPY_BINS` =
+`MAX_SNAPSHOT_CAPACITY` = `1_000_000`, before any allocation), then
+**overwrites** every slot. Capacity is never shrunk. A buffer whose
 `capacity()` is already large enough performs **no output allocation** in
 steady state.
 
@@ -218,7 +220,8 @@ Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf
 | `compute_surprise` | `sigma ≤ 0` with valid positive samples | `z_score = surprise = 0`; `log_return` still reported |
 | `detect_anomaly` | non-finite surprise or threshold | `false` (not an anomaly) |
 | `compute_shannon_entropy` | `len < 2`, `bins == 0`, any non-finite sample, overflowed `max - min` range | zeroed result (`bin_count = 0`) |
-| `compute_shannon_entropy` | constant series (`max == min`) | `shannon = 0`, `bin_count = 1` |
+| `compute_shannon_entropy` / `compute_shannon_entropy_into` | `bins > MAX_ENTROPY_BINS` (`= MAX_SNAPSHOT_CAPACITY = 1_000_000`, ≈ 8 MiB of `usize`) | out of policy: zeroed result (`bin_count = 0`) before any allocation; `*_into` buffer is cleared (`len == 0`, capacity retained); resolution is not silently reduced |
+| `compute_shannon_entropy` | constant series (`max == min`) with `bins` within policy | `shannon = 0`, `bin_count = 1` (an oversized `bins` is rejected first with `bin_count = 0`, per the row above) |
 | `compute_signal_stats` | empty slice, any non-finite sample, or overflowing second moment | all zeros, `count = 0` |
 | `compute_signal_stats` | constant / near-zero variance | `skewness = kurtosis = 0` |
 | `VolEstimator::push` / `rms` | non-finite push; empty window | push ignored; empty `rms = 0`; output clamped to `[0, 1]` |
@@ -243,7 +246,21 @@ Typical execution times (Ryzen 9 9950X):
 ## Upgrading from v0.4.x
 
 v0.5.0 adds buffer-reuse APIs and snapshot/restore APIs. Existing
-allocating functions, `push` / `update`, and batch functions are unchanged.
+allocating functions, `push` / `update`, and batch functions are unchanged,
+with one tightened input range: `compute_shannon_entropy` and
+`compute_shannon_entropy_into` now reject a `bins` greater than
+`MAX_ENTROPY_BINS` (`= MAX_SNAPSHOT_CAPACITY = 1_000_000`) with the zeroed
+sentinel (`bin_count == 0`) before any histogram allocation, instead of
+attempting an unbounded reservation on non-degenerate input. A caller that
+previously passed a value such as `bins == 1_000_001` and received a computed
+entropy now gets the rejected-request sentinel; treat `bin_count == 0` as a
+rejected resolution, not a real zero-entropy result. The rejection runs before
+the constant-series branch, so an oversized `bins` yields `bin_count == 0` for
+every input distribution (a constant series only yields `bin_count == 1` when
+`bins` is within policy). Behavior for valid `bins` (`1..=MAX_ENTROPY_BINS`) is
+unchanged. This mirrors the `SMA::new` / `VolEstimator::new` allocation ceiling
+below and is an intentional 0.5.0 hardening; callers that need a larger
+histogram must stay on 0.4.x or reduce the resolution.
 
 `VolEstimator::new` now panics if `capacity` exceeds `MAX_SNAPSHOT_CAPACITY`
 (`1_000_000`, about 4 MiB of `f32` samples). Windows larger than that
@@ -261,6 +278,7 @@ The new names are also exported by `prelude`:
 | `compute_surprise_sequence_into` | Reuse a caller `Vec<SurpriseResult>` |
 | `compute_shannon_entropy_into` | Reuse a caller histogram `Vec<usize>` |
 | `surprise_sequence_len` | Output length: `n.saturating_sub(1)` |
+| `MAX_ENTROPY_BINS` | Supported histogram `bins` ceiling for the entropy entry points (`= MAX_SNAPSHOT_CAPACITY = 1_000_000`) |
 | `VolEstimatorSnapshot`, `EMASnapshot`, `SMASnapshot` | Versioned estimator snapshot structs |
 | `SNAPSHOT_SCHEMA_VERSION`, `RESTORE_OUTPUT_TOLERANCE` | Snapshot schema constants |
 | `SnapshotError` | Typed validation error on snapshot restore |
