@@ -46,7 +46,9 @@ pub struct HawkesParams {
     pub mu: f64,
     /// Excitation amplitude \(\alpha \ge 0\) added by each event.
     pub alpha: f64,
-    /// Exponential decay rate \(\beta > 0\) of excitation.
+    /// Exponential decay rate \(\beta \ge 0\) of excitation. `beta == 0`
+    /// (including `-0.0`) is the non-decaying limit: the decay factor is
+    /// exactly `1.0` and excitation accumulates without decaying.
     pub beta: f64,
     /// Nominal time step (unused by the current estimators; retained for API stability).
     pub dt: f64,
@@ -71,6 +73,10 @@ fn params_usable(params: &HawkesParams) -> bool {
         && params.mu >= 0.0
         && params.alpha >= 0.0
         && params.beta >= 0.0
+}
+
+fn decay_factor(beta: f64, dt: f64) -> f64 {
+    if beta == 0.0 { 1.0 } else { (-beta * dt).exp() }
 }
 
 fn empty_result(params: &HawkesParams) -> HawkesResult {
@@ -113,7 +119,7 @@ pub fn compute_hawkes(event_times: &[f64], params: &HawkesParams) -> HawkesResul
     let mut excitation_sum = 0.0;
     for &t in event_times {
         let dt = (last_time - t).max(0.0);
-        excitation_sum += params.alpha * (-params.beta * dt).exp();
+        excitation_sum += params.alpha * decay_factor(params.beta, dt);
     }
 
     let n = event_times.len() as f64;
@@ -193,7 +199,7 @@ pub fn compute_hawkes_streaming(
     }
 
     let dt = new_event_time - last_event_time;
-    let decayed_sum = decay_sum.max(0.0) * (-params.beta * dt).exp();
+    let decayed_sum = decay_sum.max(0.0) * decay_factor(params.beta, dt);
     let new_intensity = params.mu + params.alpha * decayed_sum;
     let new_decay_sum = decayed_sum + 1.0;
     if !new_intensity.is_finite() || !new_decay_sum.is_finite() {

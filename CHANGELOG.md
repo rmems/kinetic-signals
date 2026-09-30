@@ -10,6 +10,19 @@ Crate version **0.5.0**.
 
 ### Fixed
 
+- The Hawkes zero-decay contract is now explicit and consistent across
+  batch, streaming, docs, and tests. `beta >= 0` is the accepted contract;
+  `beta == 0` (including `-0.0`) is the non-decaying limit whose decay factor
+  is exactly `1.0`, so excitation accumulates without decaying. Both
+  `compute_hawkes` and `compute_hawkes_streaming` now route the decay factor
+  through one shared helper, so `beta == 0` yields a decay factor of `1.0`
+  even for a very large / overflowing finite gap (previously `0 * inf`
+  produced `NaN`, which the batch API turned into the empty sentinel and the
+  streaming API skipped). Behavior for any positive `beta` is unchanged. The
+  `HawkesParams::beta` doc now matches validation, the README numeric-input
+  contract documents `beta == 0` / `-0.0` as valid, and a focused
+  `tests/hawkes_zero_decay.rs` covers it. No public precondition was
+  tightened, so this is not a breaking change and needs no SemVer bump.
 - Snapshot restore now enforces the same `1..=MAX_SNAPSHOT_CAPACITY` bound as
   `VolEstimator::new` for `VolEstimatorSnapshot`, enforces the SMA
   `0..=MAX_SNAPSHOT_CAPACITY` range shared by `SMA::new` and restore by

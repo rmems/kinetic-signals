@@ -209,6 +209,7 @@ Public numerical APIs expect **finite** inputs. Non-finite values (`NaN`, `±Inf
 |-----|---------------------------------|-----------------|
 | `compute_hurst` | `len < 32`, any non-finite sample, constant / near-constant windows, underdetermined log-log fit | `h = 0.5`, both persistence flags `false` |
 | `compute_hawkes` | empty history, any non-finite time or parameter, `mu < 0` / `alpha < 0` / `beta < 0`, overflowed excitation sum | `event_count = 0`, `intensity = μ` (or `0` if `μ` is non-finite), `avg_excitation = 0` |
+| `compute_hawkes` / `compute_hawkes_streaming` | `beta == 0` (including `-0.0`) | **valid** non-decaying limit: decay factor is exactly `1.0`, excitation does not decay (holds even for an overflowing finite gap) |
 | `compute_hawkes` | negative inter-event gap (non-monotonic times) | empty-history sentinel (`event_count = 0`) |
 | `compute_hawkes_streaming` | backwards tick (`new_event_time < last_event_time`) | ignore the tick; keep `decay_sum`; intensity is `μ + α · decay_sum` |
 | `compute_hawkes_streaming` | non-finite time, `decay_sum`, or parameters | `(μ, decay_sum)` with non-finite fields replaced by `0`; finite decay history is preserved |
