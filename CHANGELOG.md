@@ -85,8 +85,21 @@ Crate version **0.5.0**.
   one allocation ceiling. `capacity == 0` remains supported (a no-op
   estimator whose `update` returns `0.0`). Callers that need a larger window
   must stay on 0.4.x or split the window into multiple smaller SMAs.
+- `compute_shannon_entropy` and `compute_shannon_entropy_into` now reject a
+  `bins` above `MAX_ENTROPY_BINS` (`1_000_000`) with the zeroed sentinel
+  (`bin_count == 0`) instead of attempting an unbounded histogram allocation
+  on non-degenerate input. This tightens the accepted input range of two
+  existing public functions: a caller that previously relied on
+  `bins > 1_000_000` (for example `bins == 1_000_001`) now receives the
+  rejected-request sentinel rather than a computed entropy, and must not
+  mistake it for a real zero-entropy result. The rejection is applied before
+  the constant-series branch, so an oversized `bins` returns `bin_count == 0`
+  for every input distribution. All behavior for valid `bins`
+  (`1..=MAX_ENTROPY_BINS`) is unchanged. Callers that need a larger histogram
+  must stay on 0.4.x or reduce the resolution.
 - The prelude glob now also exports `compute_surprise_sequence_into`,
-  `compute_shannon_entropy_into`, and `surprise_sequence_len`. Downstream
+  `compute_shannon_entropy_into`, `surprise_sequence_len`, and
+  `MAX_ENTROPY_BINS`. Downstream
   `use kinetic_signals::prelude::*` combined with another glob that already
   defines those names becomes ambiguous; qualify the path or use explicit
   imports. See "Upgrading from v0.4.x" in the README.

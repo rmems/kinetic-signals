@@ -56,15 +56,18 @@ fn zero_entropy() -> EntropyResult {
 /// (finite values near opposite extremes) is treated the same way: equal-width
 /// bins are undefined, so the empty sentinel is returned (`bin_count == 0`).
 /// A constant (including near-constant with `max == min`) series yields zero
-/// entropy with `bin_count == 1`.
+/// entropy with `bin_count == 1`, provided `bins` is within policy.
 ///
 /// # Resource policy
 ///
 /// Supported `bins` are `1..=`[`MAX_ENTROPY_BINS`] (`1_000_000`). A request
 /// above that ceiling is out of policy and returns the zeroed sentinel
 /// (`bin_count == 0`) before any histogram allocation, rather than attempting
-/// an unbounded reservation. The requested resolution is rejected outright,
-/// never silently reduced. Because this wrapper delegates to
+/// an unbounded reservation. This rejection is applied before the
+/// constant-series branch, so an oversized `bins` yields `bin_count == 0` for
+/// every input distribution (including a constant series), never
+/// `bin_count == 1`. The requested resolution is rejected outright, never
+/// silently reduced. Because this wrapper delegates to
 /// [`compute_shannon_entropy_into`], both entry points share this policy.
 ///
 /// # Example
@@ -138,6 +141,11 @@ pub fn compute_shannon_entropy_into(
         return zero_entropy();
     }
 
+    if bins > MAX_ENTROPY_BINS {
+        histogram.clear();
+        return zero_entropy();
+    }
+
     let min = data.iter().copied().fold(f64::INFINITY, f64::min);
     let max = data.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let range = max - min;
@@ -152,11 +160,6 @@ pub fn compute_shannon_entropy_into(
             relative: 0.0,
             bin_count: 1,
         };
-    }
-
-    if bins > MAX_ENTROPY_BINS {
-        histogram.clear();
-        return zero_entropy();
     }
 
     if histogram.len() != bins {
@@ -273,9 +276,30 @@ mod tests {
         assert_eq!(empty.bin_count, 0);
         let short = compute_shannon_entropy(&[1.0], usize::MAX);
         assert_eq!(short.bin_count, 0);
-        let constant = compute_shannon_entropy(&[1.0, 1.0], usize::MAX);
-        assert_eq!(constant.bin_count, 1);
-        assert_eq!(constant.shannon, 0.0);
+        let constant_out_of_policy = compute_shannon_entropy(&[1.0, 1.0], usize::MAX);
+        assert_eq!(constant_out_of_policy.bin_count, 0);
+        assert_eq!(constant_out_of_policy.shannon, 0.0);
+    }
+
+    #[test]
+    fn test_entropy_bins_above_ceiling_on_constant_series_is_out_of_policy() {
+        let data = [1.0, 1.0, 1.0];
+
+        for &bins in &[MAX_ENTROPY_BINS + 1, usize::MAX] {
+            let mut histogram = vec![7usize; 5];
+            let res = compute_shannon_entropy_into(&data, bins, &mut histogram);
+            assert!(histogram.is_empty());
+            assert_eq!(res.bin_count, 0);
+            assert_eq!(res.shannon, 0.0);
+            assert_eq!(res.relative, 0.0);
+            assert_entropy_eq(&res, &compute_shannon_entropy(&data, bins));
+        }
+
+        let mut histogram = Vec::new();
+        let within = compute_shannon_entropy_into(&data, 4, &mut histogram);
+        assert_eq!(within.bin_count, 1);
+        assert_eq!(within.shannon, 0.0);
+        assert_entropy_eq(&within, &compute_shannon_entropy(&data, 4));
     }
 
     #[test]
