@@ -23,17 +23,6 @@ fn bounded_series(state: &mut u64, n: usize, lo: f64, hi: f64) -> Vec<f64> {
     (0..n).map(|_| bounded_f64(state, lo, hi)).collect()
 }
 
-fn walk_hawkes_post(events: &[f64], params: &HawkesParams) -> f64 {
-    let mut decay = 0.0;
-    let mut last = events[0];
-    for &t in events {
-        let (_, d) = compute_hawkes_streaming(0.0, t, last, params, decay);
-        decay = d;
-        last = t;
-    }
-    params.mu + params.alpha * decay
-}
-
 #[test]
 fn property_hurst_finite_for_bounded_inputs() {
     let mut rng = 0x1111_2222_3333_4444;
@@ -90,23 +79,55 @@ fn property_surprise_finite_for_positive_bounded_inputs() {
 }
 
 #[test]
-fn property_hawkes_batch_matches_streaming_post_event() {
-    let mut rng = 0x7777_8888_9999_aaaa;
-    let params = HawkesParams::default();
-    for _ in 0..32 {
-        let mut t = 0.0;
-        let events: Vec<f64> = (0..8)
-            .map(|_| {
-                t += bounded_f64(&mut rng, 0.0, 0.25);
-                t
-            })
-            .collect();
-        let batch = compute_hawkes(&events, &params);
-        let post = walk_hawkes_post(&events, &params);
-        assert!(batch.intensity.is_finite());
-        assert!((post - batch.intensity).abs() < 1e-9);
-        assert!(batch.avg_excitation.is_finite() && batch.avg_excitation >= 0.0);
+fn hawkes_excitation_overflow_is_not_a_finite_equivalence_case() {
+    for beta in [0.0, -0.0, 1.0] {
+        let params = HawkesParams {
+            mu: 0.0,
+            alpha: f64::MAX,
+            beta,
+            dt: 0.001,
+        };
+        let first = compute_hawkes(&[0.0], &params);
+        assert_eq!(first.event_count, 1);
+        assert_eq!(first.intensity, f64::MAX);
+        assert_eq!(first.avg_excitation, f64::MAX);
+
+        // Two tied events contribute 2*MAX mathematically, outside f64 range.
+        for count in [2, 3] {
+            let batch = compute_hawkes(&vec![0.0; count], &params);
+            assert_eq!(batch.event_count, 0, "{params:?}, count={count}");
+            assert_eq!(batch.intensity, 0.0, "{params:?}, count={count}");
+            assert_eq!(batch.avg_excitation, 0.0, "{params:?}, count={count}");
+        }
+
+        let first = compute_hawkes_streaming(0.0, 0.0, 0.0, &params, 0.0);
+        assert_eq!(first, (0.0, 1.0), "{params:?}");
+        let second = compute_hawkes_streaming(first.0, 0.0, 0.0, &params, first.1);
+        assert_eq!(second, (f64::MAX, 2.0), "{params:?}");
+        assert!((params.mu + params.alpha * second.1).is_infinite());
+        // Streaming guards its pre-jump result, not the caller's post-event value.
+        let third = compute_hawkes_streaming(second.0, 0.0, 0.0, &params, second.1);
+        assert_eq!(third, (0.0, 2.0), "{params:?}");
     }
+}
+
+#[test]
+fn hawkes_baseline_addition_overflow_preserves_streaming_state() {
+    let params = HawkesParams {
+        mu: f64::MAX,
+        alpha: f64::MAX,
+        ..HawkesParams::default()
+    };
+    let batch = compute_hawkes(&[0.0], &params);
+    assert_eq!(batch.event_count, 0);
+    assert_eq!(batch.intensity, f64::MAX);
+    assert_eq!(batch.avg_excitation, 0.0);
+    let (pre, state) = compute_hawkes_streaming(0.0, 0.0, 0.0, &params, 0.0);
+    assert_eq!((pre, state), (f64::MAX, 1.0));
+    assert_eq!(
+        compute_hawkes_streaming(pre, 0.0, 0.0, &params, state),
+        (f64::MAX, 1.0)
+    );
 }
 
 #[test]
