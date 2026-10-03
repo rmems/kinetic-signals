@@ -19,7 +19,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 cargo package --list && cargo package         # what actually ships to crates.io
 ```
 
-MSRV: Rust >= 1.85 (edition 2024). `Cargo.lock` is gitignored (library crate) —
+MSRV: Rust >= 1.98.1 (edition 2024). `Cargo.lock` is gitignored (library crate) —
 CI commands must not use `--locked`, it fails on a fresh checkout with no lockfile.
 
 ## Architecture

@@ -1,5 +1,7 @@
 # kinetic-signals
 
+See @CLAUDE.md for additional repository context. The @-mention makes Amp load it; Amp reads `CLAUDE.md` on its own only when no `AGENTS.md` exists.
+
 A Rust library crate for streaming signal feature extraction. Computes Hurst exponent, Hawkes process intensity, surprise anomaly detection, volatility, Shannon entropy, and technical indicators on high-velocity stochastic time-series.
 
 Part of the [rmems](https://github.com/rmems) ecosystem. See [`docs/boundary-matrix.md`](docs/boundary-matrix.md) for what this crate owns vs. neighboring crates.
