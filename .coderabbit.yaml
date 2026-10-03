@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# Draft CodeRabbit config for rmems/kinetic-signals (generated locally, not pushed).
+# CodeRabbit configuration for rmems/kinetic-signals
 language: en-US
 reviews:
   profile: chill
@@ -12,9 +12,9 @@ reviews:
   - '!**/target/**'
   path_instructions:
   - path: '**/*.rs'
-    instructions: 'Rust edition 2024; `rust-version = "1.98.1"`; CI toolchain 1.98.1. Do not suggest downgrading the edition or using std/language APIs newer than the pinned toolchain/MSRV. CI gate: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-features`, `cargo test --no-default-features`, `cargo audit`. Flag anything that would fail `cargo fmt --check` or clippy `-D warnings`. The `serde` feature is optional: code must compile with `--no-default-features`.'
+    instructions: 'Rust edition 2024; `rust-version = "1.98.1"`; CI toolchain 1.98.1. Do not suggest downgrading the edition or using std/language APIs newer than the pinned toolchain/MSRV. CI gate: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test --all-features`, `cargo test --no-default-features`, `cargo audit`, `cargo package`, `cargo publish --dry-run`. Flag anything that would fail `cargo fmt --check` or clippy `-D warnings`, and flag any new `unsafe` code. The `serde` feature is optional: code must compile with `--no-default-features`.'
   - path: tests/output_reuse.rs
-    instructions: 'Scrutinize every `unsafe` block (currently in `tests/output_reuse.rs`): require a written safety justification covering aliasing, lifetimes, alignment and bounds; prefer a safe abstraction when one exists. Flag any new `unsafe` outside these files.'
+    instructions: 'Scrutinize every `unsafe` block: require a written safety justification covering aliasing, lifetimes, alignment and bounds; prefer a safe abstraction when one exists.'
   - path: '**/Cargo.toml'
     instructions: Cargo manifest. Call out new dependencies and feature changes, and keep `rust-version` / `edition` consistent with CI.
   - path: Dockerfile
