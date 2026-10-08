@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "tolerance": 1e-06,
+  "provenance": {
+    "producer_crate": "kinetic-signals",
+    "producer_version": "0.5.0",
+    "producer_commit": "88f4d5453b65e0dd0572e231d6436ab86b1b1d1b",
+    "producer_commit_date": "2026-10-03T08:27:20Z",
+    "codec": "serde_json 1 via the `serde` feature (serde_json::to_string, compact output)",
+    "generated_on": "2026-10-08",
+    "tracking_issue": "RM-1881",
+    "procedure": "At producer_commit, each `valid` estimator was constructed with the recorded constructor argument and fed `history`; `payload` is serde_json::to_string(&estimator.snapshot()). The same estimator was then fed `continuation_input`, recording rms() (VolEstimator) or update() return values (EMA, SMA) as `expected_continuation`. Negative payloads were written by hand against the same schema.",
+    "policy": "Frozen historical evidence. Never regenerate or edit existing payloads or expected outputs to make tests pass after a representation change: a failure here means schema-v1 compatibility broke. Add new fixtures alongside these instead."
+  },
+  "valid": {
+    "vol_wrapped_ring": {
+      "estimator": "VolEstimator",
+      "constructor_arg": 4,
+      "history": [0.01, 0.02, 0.015, 0.03, 0.012, 0.025],
+      "payload": {"schema_version":1,"capacity":4,"pos":2,"full":true,"samples":[0.012,0.025,0.015,0.03]},
+      "continuation_input": [0.018, 0.022, 0.016],
+      "expected_continuation": [0.022321515, 0.01985573, 0.020548722]
+    },
+    "vol_partial_ring": {
+      "estimator": "VolEstimator",
+      "constructor_arg": 5,
+      "history": [0.04, 0.01],
+      "payload": {"schema_version":1,"capacity":5,"pos":2,"full":false,"samples":[0.04,0.01,0.0,0.0,0.0]},
+      "continuation_input": [0.02, 0.03],
+      "expected_continuation": [0.026457513, 0.027386127]
+    },
+    "ema_initialized": {
+      "estimator": "EMA",
+      "constructor_arg": 9,
+      "history": [100.0, 110.0, 105.0],
+      "payload": {"schema_version":1,"value":102.60000000000001,"alpha":0.2,"initialized":true},
+      "continuation_input": [108.0, 112.0],
+      "expected_continuation": [103.68, 105.34400000000002]
+    },
+    "ema_uninitialized": {
+      "estimator": "EMA",
+      "constructor_arg": 4,
+      "history": [],
+      "payload": {"schema_version":1,"value":0.0,"alpha":0.4,"initialized":false},
+      "continuation_input": [10.0, 12.0],
+      "expected_continuation": [10.0, 10.8]
+    },
+    "sma_full_window": {
+      "estimator": "SMA",
+      "constructor_arg": 3,
+      "history": [1.0, 2.0, 3.0, 4.0],
+      "payload": {"schema_version":1,"capacity":3,"window":[2.0,3.0,4.0],"sum":9.0},
+      "continuation_input": [5.0, 6.0],
+      "expected_continuation": [4.0, 5.0]
+    },
+    "sma_partial_window": {
+      "estimator": "SMA",
+      "constructor_arg": 5,
+      "history": [0.1, 0.2, 0.3],
+      "payload": {"schema_version":1,"capacity":5,"window":[0.1,0.2,0.3],"sum":0.6000000000000001},
+      "continuation_input": [0.4, 0.5, 0.6],
+      "expected_continuation": [0.25, 0.3, 0.39999999999999997]
+    },
+    "sma_zero_capacity": {
+      "estimator": "SMA",
+      "constructor_arg": 0,
+      "history": [],
+      "payload": {"schema_version":1,"capacity":0,"window":[],"sum":0.0},
+      "continuation_input": [1.0],
+      "expected_continuation": [0.0]
+    }
+  },
+  "decode_failures": {
+    "vol_missing_full": {
+      "estimator": "VolEstimator",
+      "payload": {"schema_version":1,"capacity":2,"pos":0,"samples":[0.1,0.2]}
+    },
+    "vol_negative_capacity": {
+      "estimator": "VolEstimator",
+      "payload": {"schema_version":1,"capacity":-1,"pos":0,"full":false,"samples":[]}
+    },
+    "ema_null_value": {
+      "estimator": "EMA",
+      "payload": {"schema_version":1,"value":null,"alpha":0.2,"initialized":true},
+      "notes": "serde_json encodes NaN/inf as null; it cannot be decoded back into f64."
+    },
+    "sma_capacity_as_string": {
+      "estimator": "SMA",
+      "payload": {"schema_version":1,"capacity":"3","window":[1.0],"sum":1.0}
+    },
+    "sma_missing_schema_version": {
+      "estimator": "SMA",
+      "payload": {"capacity":3,"window":[1.0],"sum":1.0}
+    }
+  },
+  "validation_failures": {
+    "vol_future_schema": {
+      "estimator": "VolEstimator",
+      "payload": {"schema_version":2,"capacity":2,"pos":0,"full":false,"samples":[0.1,0.0]},
+      "expected_error": "IncompatibleVersion",
+      "found": 2
+    },
+    "ema_schema_zero": {
+      "estimator": "EMA",
+      "payload": {"schema_version":0,"value":1.0,"alpha":0.2,"initialized":true},
+      "expected_error": "IncompatibleVersion",
+      "found": 0
+    },
+    "sma_future_schema": {
+      "estimator": "SMA",
+      "payload": {"schema_version":2,"capacity":3,"window":[1.0],"sum":1.0},
+      "expected_error": "IncompatibleVersion",
+      "found": 2
+    },
+    "vol_zero_capacity": {
+      "estimator": "VolEstimator",
+      "payload": {"schema_version":1,"capacity":0,"pos":0,"full":false,"samples":[]},
+      "expected_error": "InvalidCapacity"
+    },
+    "vol_samples_len_mismatch": {
+      "estimator": "VolEstimator",
+      "payload": {"schema_version":1,"capacity":3,"pos":0,"full":false,"samples":[0.1,0.2]},
+      "expected_error": "InvalidLength"
+    },
+    "vol_pos_out_of_range": {
+      "estimator": "VolEstimator",
+      "payload": {"schema_version":1,"capacity":2,"pos":2,"full":true,"samples":[0.1,0.2]},
+      "expected_error": "InconsistentState"
+    },
+    "vol_f32_overflow_sample": {
+      "estimator": "VolEstimator",
+      "payload": {"schema_version":1,"capacity":2,"pos":0,"full":false,"samples":[1e39,0.0]},
+      "expected_error": "NonFinite",
+      "notes": "1e39 decodes into f32 as +inf; restore-time validation must reject it."
+    },
+    "ema_alpha_out_of_range": {
+      "estimator": "EMA",
+      "payload": {"schema_version":1,"value":1.0,"alpha":3.0,"initialized":true},
+      "expected_error": "InconsistentState"
+    },
+    "sma_window_exceeds_capacity": {
+      "estimator": "SMA",
+      "payload": {"schema_version":1,"capacity":2,"window":[1.0,2.0,3.0],"sum":6.0},
+      "expected_error": "InvalidLength"
+    },
+    "sma_sum_inconsistent": {
+      "estimator": "SMA",
+      "payload": {"schema_version":1,"capacity":3,"window":[1.0,2.0,3.0],"sum":600.0},
+      "expected_error": "InconsistentState"
+    },
+    "sma_capacity_above_limit": {
+      "estimator": "SMA",
+      "payload": {"schema_version":1,"capacity":1000001,"window":[],"sum":0.0},
+      "expected_error": "InvalidCapacity"
+    }
+  }
+}
