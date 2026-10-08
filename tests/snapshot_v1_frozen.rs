@@ -12,8 +12,8 @@
 use std::fmt::Debug;
 
 use kinetic_signals::{
-    EMA, EMASnapshot, SMA, SMASnapshot, SNAPSHOT_SCHEMA_VERSION, SnapshotError, VolEstimator,
-    VolEstimatorSnapshot,
+    EMA, EMASnapshot, RESTORE_OUTPUT_TOLERANCE, SMA, SMASnapshot, SNAPSHOT_SCHEMA_VERSION,
+    SnapshotError, VolEstimator, VolEstimatorSnapshot,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -114,6 +114,32 @@ fn section(root: &Value, key: &str) -> Map<String, Value> {
         .clone()
 }
 
+fn assert_json_close(got: &Value, want: &Value, tolerance: f64, ctx: &str) {
+    match (got, want) {
+        (Value::Number(a), Value::Number(b)) => {
+            let a = a.as_f64().expect("f64");
+            let b = b.as_f64().expect("f64");
+            assert!(
+                (a - b).abs() <= tolerance * b.abs().max(1.0),
+                "{ctx}: replayed {a}, frozen {b}"
+            );
+        }
+        (Value::Array(a), Value::Array(b)) => {
+            assert_eq!(a.len(), b.len(), "{ctx}: length");
+            for (i, (x, y)) in a.iter().zip(b).enumerate() {
+                assert_json_close(x, y, tolerance, &format!("{ctx}[{i}]"));
+            }
+        }
+        (Value::Object(a), Value::Object(b)) => {
+            assert_eq!(a.len(), b.len(), "{ctx}: field count");
+            for (k, v) in a {
+                assert_json_close(v, &b[k], tolerance, &format!("{ctx}.{k}"));
+            }
+        }
+        _ => assert_eq!(got, want, "{ctx}"),
+    }
+}
+
 fn f64s(v: &Value) -> Vec<f64> {
     v.as_array()
         .expect("array of numbers")
@@ -142,6 +168,7 @@ fn error_name(err: SnapshotError) -> (&'static str, Option<u32>) {
 }
 
 fn check_valid<E: Estimator>(name: &str, case: &Value, tolerance: f64) {
+    let tolerance = tolerance.max(RESTORE_OUTPUT_TOLERANCE);
     let payload = &case["payload"];
     let snap: E::Snapshot = serde_json::from_value(payload.clone())
         .unwrap_or_else(|e| panic!("{name}: frozen v1 payload no longer decodes: {e}"));
@@ -157,6 +184,19 @@ fn check_valid<E: Estimator>(name: &str, case: &Value, tolerance: f64) {
     assert_eq!(restored.snapshot(), snap, "{name}: from_snapshot state");
 
     let constructor_arg = case["constructor_arg"].as_u64().expect("constructor_arg") as usize;
+    let mut replayed = E::construct(constructor_arg);
+    for &x in &f64s(&case["history"]) {
+        replayed.step(x);
+    }
+    let replayed_json: Value =
+        serde_json::from_str(&serde_json::to_string(&replayed.snapshot()).unwrap()).unwrap();
+    assert_json_close(
+        &replayed_json,
+        payload,
+        tolerance,
+        &format!("{name}: recorded history"),
+    );
+
     let mut reused = E::construct(constructor_arg);
     reused.step(1.0);
     reused.restore(&snap).expect("restore");
