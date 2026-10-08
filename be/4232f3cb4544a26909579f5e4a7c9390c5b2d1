@@ -1,0 +1,23 @@
+tests/snapshot_v1_frozen.rs
+  ai_agent 206-210
+  s_9d337e5c2f94b5::t_696b00076cb507 1-205,211-266,268-269,273-314
+  s_9d337e5c2f94b5::t_df7d07ef72fc56 267,270-272
+tests/fixtures/snapshot_v1_frozen.json
+  s_9d337e5c2f94b5::t_b2fab3dd23eac7 1-157
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "be4232f3cb4544a26909579f5e4a7c9390c5b2d1",
+  "prompts": {},
+  "sessions": {
+    "s_9d337e5c2f94b5": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "c4333984-a6be-4311-bfad-4b656e02a01b",
+        "model": "default"
+      },
+      "human_author": "Raul Cardenas Montoya <montoyaraul34@gmail.com>"
+    }
+  }
+}
