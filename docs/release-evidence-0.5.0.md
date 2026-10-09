@@ -45,8 +45,10 @@ Results:
   `*_into` output paths, `serde` impls, `MAX_ENTROPY_BINS`) are
   additive.
 
-Enforced in CI job `api-diff` (`--baseline-version 0.4.0`, which
-fetches the published 0.4.0 crate).
+Enforced in CI job `api-diff`, which runs both commands above
+(`--baseline-version 0.4.0` fetches the published 0.4.0 crate; the
+patch-strict run fails on any future signature-level break that a
+0.x minor bump would otherwise mask).
 
 ## Human review of behavioral changes
 
@@ -61,7 +63,7 @@ section and README contract tables:
 | `SMA::new` panics when `capacity > MAX_SNAPSHOT_CAPACITY` | Intentional, documented. Same shared ceiling; `capacity == 0` still accepted (no-op estimator). |
 | `compute_shannon_entropy` / `compute_shannon_entropy_into` reject `bins > MAX_ENTROPY_BINS` with the `bin_count == 0` sentinel | Intentional, documented. Rejection precedes the constant-series branch so oversized requests never read as real zero-entropy results; all valid `bins` unchanged. |
 | Prelude glob additions (`compute_surprise_sequence_into`, `compute_shannon_entropy_into`, `surprise_sequence_len`, `MAX_ENTROPY_BINS`, snapshot types) | Reviewed per the README pre-1.0 policy: glob additions can collide with downstream combined globs; migration notes in "Upgrading from v0.4.x". |
-| Hawkes zero-decay semantics | Tracked under [RM-1871](https://linear.app/rpd-34/issue/RM-1871) — must be resolved before the final publish-commit re-run of this record. |
+| Hawkes zero-decay semantics | Resolved under [RM-1871](https://linear.app/rpd-34/issue/RM-1871): `beta == 0` (incl. `-0.0`) is the non-decaying limit (decay factor exactly `1.0`) through one shared helper; not a breaking change. Verify its issue state stays closed at publish time. |
 | `serde` feature (optional, off by default) | Additive; derive impls on snapshot types only. Default build remains zero-dependency. |
 
 ## Re-run procedure on the publish commit

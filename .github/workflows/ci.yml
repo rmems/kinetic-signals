@@ -109,7 +109,9 @@ jobs:
           git rev-parse 'v0.4.0^{commit}'
 
       - name: Compare public API against v0.4.0 baseline
-        run: cargo semver-checks check-release --baseline-version 0.4.0
+        run: |
+          cargo semver-checks check-release --baseline-version 0.4.0
+          cargo semver-checks check-release --baseline-version 0.4.0 --release-type patch
 
   msrv:
     name: Minimum Rust Check (1.98.1)
