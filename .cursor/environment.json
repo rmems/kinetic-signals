@@ -1,0 +1,4 @@
+{
+  "name": "kinetic-signals",
+  "install": "bash .cursor/install.sh"
+}
