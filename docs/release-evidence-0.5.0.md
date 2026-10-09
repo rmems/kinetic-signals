@@ -11,7 +11,7 @@ publication.
 | Item | Value |
 |------|-------|
 | Baseline release | `v0.4.0` tag `a46f8c947040dcd8e19c74dcb6c16ff1321231cf` (crates.io `kinetic-signals 0.4.0`) |
-| Candidate SHA | `88f4d5453b65e0dd0572e231d6436ab86b1b1d1b` (main at qualification time; re-run on the exact publish commit) |
+| Candidate SHA | `29ae4bf` (PR head at qualification time; re-run on the exact publish commit) |
 | Rust toolchain | 1.98.1 (CI pin and MSRV); local verification on 1.99.0 |
 | cargo-semver-checks | 0.51.0 |
 | MSRV note | Rust 1.98.1 was already the 0.4.0 MSRV (`rust-version` in the v0.4.0 `Cargo.toml`); it is unchanged, not new in 0.5.0 |
