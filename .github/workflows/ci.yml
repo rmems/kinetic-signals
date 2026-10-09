@@ -100,13 +100,13 @@ jobs:
           key: ${{ runner.os }}-cargo-api-diff-${{ hashFiles('**/Cargo.toml') }}
 
       - name: Install cargo-semver-checks 0.51.0
-        run: cargo install cargo-semver-checks --version 0.51.0
+        run: cargo install cargo-semver-checks --version 0.51.0 --locked
 
       - name: Report tool versions
         run: |
           rustc --version
           cargo semver-checks --version
-          git rev-parse v0.4.0
+          git rev-parse 'v0.4.0^{commit}'
 
       - name: Compare public API against v0.4.0 baseline
         run: cargo semver-checks check-release --baseline-version 0.4.0
