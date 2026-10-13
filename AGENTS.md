@@ -64,7 +64,7 @@ cargo run --example demo
 
 | Workflow | Trigger | What it does |
 |----------|---------|--------------|
-| `ci.yml` | push/PR to main | fmt, clippy, build, test, minimum-toolchain check, no-default-features build, cargo audit |
+| `ci.yml` | push/PR to main | fmt, clippy, build, test, warnings-denied rustdoc, cargo-semver-checks vs v0.4.0, minimum-toolchain check, no-default-features build, packaging gate, cargo audit |
 | `coverage.yml` | push/PR to main | cargo-llvm-cov + Codecov upload |
 | `docker.yml` | push/PR to main | Containerized build + test |
 

@@ -144,7 +144,7 @@ impl ZScore {
 /// Non-finite samples are ignored.
 ///
 /// Construction and snapshot restore share one capacity range,
-/// `0..=`[`MAX_SNAPSHOT_CAPACITY`](crate::MAX_SNAPSHOT_CAPACITY): both accept a
+/// `0..=`[`MAX_SNAPSHOT_CAPACITY`]: both accept a
 /// zero-capacity (no-op) estimator and reject anything above the ceiling.
 /// [`snapshot`](SMA::snapshot) then [`restore`](SMA::restore) reproduces state
 /// so subsequent [`update`](SMA::update) outputs match a continuously

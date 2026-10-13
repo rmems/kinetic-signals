@@ -22,7 +22,7 @@ use crate::snapshot::MAX_SNAPSHOT_CAPACITY;
 /// the zeroed sentinel instead of attempting an unbounded histogram
 /// allocation (see [`compute_shannon_entropy`] and
 /// [`compute_shannon_entropy_into`]). The ceiling reuses the crate-wide
-/// [`MAX_SNAPSHOT_CAPACITY`](crate::MAX_SNAPSHOT_CAPACITY) (`1_000_000`), a
+/// [`MAX_SNAPSHOT_CAPACITY`] (`1_000_000`), a
 /// histogram of about 8 MiB of `usize` counts, matching the allocation
 /// rationale shared by `SMA::new` and `VolEstimator::new`.
 pub const MAX_ENTROPY_BINS: usize = MAX_SNAPSHOT_CAPACITY;
