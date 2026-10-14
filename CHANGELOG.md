@@ -72,6 +72,7 @@ Crate version **0.5.0**.
 ### Breaking
 
 - Bumped the crate version to `0.5.0` for new inherent methods (`snapshot`, `restore`, `from_snapshot`) and prelude-exported snapshot types / `serde` feature, per the pre-1.0 SemVer policy. Estimator math and existing method signatures are unchanged aside from the `VolEstimator::new` capacity ceiling below.
+- Raised the MSRV from Rust 1.98.1 to Rust 1.99.0 (stable since 2026-10-01). `rust-version`, `rust-toolchain.toml`, CI, coverage, Docker, the Amp orb, and the Devin blueprint all pin 1.99.0. Callers still on 1.98.1 must stay on 0.4.x. No public API change.
 - `VolEstimator::new` now panics when `capacity > MAX_SNAPSHOT_CAPACITY`
   (`1_000_000`, about 4 MiB of `f32` samples). Previously the constructor
   accepted any positive window. This tighter public precondition is an

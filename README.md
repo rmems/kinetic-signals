@@ -152,7 +152,7 @@ cargo run --example demo
 
 ### Development
 
-**MSRV:** Rust >= 1.98.1 (edition 2024)
+**MSRV:** Rust >= 1.99.0 (edition 2024)
 
 The complete release validation sequence is in the
 [v0.4.0 changelog](CHANGELOG.md#release-checklist); `cargo publish --dry-run`

@@ -1,0 +1,6 @@
+[toolchain]
+# Keep identical to Cargo.toml `rust-version`, the CI and coverage
+# `toolchain:` pins, and `Dockerfile` (`rust:1.99.0-slim`).
+channel = "1.99.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
