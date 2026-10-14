@@ -18,6 +18,13 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+step() { printf '\n=== %s ===\n' "$1"; }
+fail() { echo "FAIL: $1" >&2; exit 1; }
+
+if [ -n "$(git status --porcelain)" ]; then
+    fail "working tree is dirty; the packaged archive would not match the recorded revision"
+fi
+
 EVIDENCE_DIR="${1:-$REPO_ROOT/target/package-evidence}"
 mkdir -p "$EVIDENCE_DIR"
 EVIDENCE_DIR="$(cd "$EVIDENCE_DIR" && pwd)"
@@ -27,15 +34,8 @@ CONSUMERS_DIR="$WORK/consumers"
 rm -rf "$EXTRACT_DIR" "$CONSUMERS_DIR" "$EVIDENCE_DIR/consumers"
 mkdir -p "$EXTRACT_DIR" "$CONSUMERS_DIR"
 
-if [ -n "$(git status --porcelain)" ]; then
-    fail "working tree is dirty; the packaged archive would not match the recorded revision"
-fi
-
 REV="$(git rev-parse HEAD)"
 SHORT_REV="$(git rev-parse --short HEAD)"
-
-step() { printf '\n=== %s ===\n' "$1"; }
-fail() { echo "FAIL: $1" >&2; exit 1; }
 
 step "Record candidate revision"
 echo "$REV" | tee "$EVIDENCE_DIR/revision.txt"
