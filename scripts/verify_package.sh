@@ -19,10 +19,13 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 EVIDENCE_DIR="${1:-$REPO_ROOT/target/package-evidence}"
+mkdir -p "$EVIDENCE_DIR"
+EVIDENCE_DIR="$(cd "$EVIDENCE_DIR" && pwd)"
 WORK="$EVIDENCE_DIR/work"
 EXTRACT_DIR="$WORK/extracted"
 CONSUMERS_DIR="$WORK/consumers"
-mkdir -p "$WORK" "$EXTRACT_DIR" "$CONSUMERS_DIR"
+rm -rf "$EXTRACT_DIR" "$CONSUMERS_DIR" "$EVIDENCE_DIR/consumers"
+mkdir -p "$EXTRACT_DIR" "$CONSUMERS_DIR"
 
 REV="$(git rev-parse HEAD)"
 SHORT_REV="$(git rev-parse --short HEAD)"
@@ -54,15 +57,18 @@ echo "benches/ present in archive: $BENCH_PACKED"
 
 step "cargo package"
 cargo package
-CRATE="$(ls -t target/package/kinetic-signals-*.crate | head -1)"
+TARGET_DIR="$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+PKG_VERSION="$(sed -n 's/^version *= *"\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+CRATE="$TARGET_DIR/package/kinetic-signals-$PKG_VERSION.crate"
 [ -f "$CRATE" ] || fail "no .crate produced"
 SHA256="$(sha256sum "$CRATE" | awk '{print $1}')"
 echo "$CRATE $SHA256" | tee "$EVIDENCE_DIR/crate-sha256.txt"
 
 step "Extract .crate outside workspace"
 tar -xzf "$CRATE" -C "$EXTRACT_DIR"
-PKG_DIR="$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
-[ -d "$PKG_DIR" ] || fail "extract failed"
+PKG_BASENAME="$(basename "$CRATE" .crate)"
+PKG_DIR="$EXTRACT_DIR/$PKG_BASENAME"
+[ -d "$PKG_DIR" ] || fail "extract failed: $PKG_DIR not found"
 cp "$PKG_DIR/Cargo.toml" "$EVIDENCE_DIR/normalized-Cargo.toml"
 cp "$PKG_DIR/Cargo.toml.orig" "$EVIDENCE_DIR/Cargo.toml.orig" 2>/dev/null || true
 
