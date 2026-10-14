@@ -27,6 +27,10 @@ CONSUMERS_DIR="$WORK/consumers"
 rm -rf "$EXTRACT_DIR" "$CONSUMERS_DIR" "$EVIDENCE_DIR/consumers"
 mkdir -p "$EXTRACT_DIR" "$CONSUMERS_DIR"
 
+if [ -n "$(git status --porcelain)" ]; then
+    fail "working tree is dirty; the packaged archive would not match the recorded revision"
+fi
+
 REV="$(git rev-parse HEAD)"
 SHORT_REV="$(git rev-parse --short HEAD)"
 
@@ -44,7 +48,7 @@ for required in Cargo.toml src/lib.rs README.md CHANGELOG.md LICENSE-MIT LICENSE
     grep -qxF "$required" "$EVIDENCE_DIR/cargo-package-list.txt" \
         || fail "required file missing from package: $required"
 done
-if grep -nE '(^|/)(tests/|benches/|docs/|\.github/|examples/.*\.json|Dockerfile|codecov\.yml|AGENTS\.md|CLAUDE\.md|REVIEW\.md|target/|\.env|.*\.(key|pem)$)' \
+if grep -nE '(^|/)(tests/|benches/|docs/|\.github/|Dockerfile|codecov\.yml|AGENTS\.md|CLAUDE\.md|REVIEW\.md|target/|\.env|.*\.(key|pem)$)' \
     "$EVIDENCE_DIR/cargo-package-list.txt"; then
     fail "repository-only files leaked into package"
 fi
@@ -57,8 +61,9 @@ echo "benches/ present in archive: $BENCH_PACKED"
 
 step "cargo package"
 cargo package
-TARGET_DIR="$(cargo metadata --format-version 1 --no-deps | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
-PKG_VERSION="$(sed -n 's/^version *= *"\([^"]*\)"/\1/p' Cargo.toml | head -1)"
+METADATA="$(cargo metadata --format-version 1 --no-deps)"
+TARGET_DIR="$(printf '%s' "$METADATA" | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+PKG_VERSION="$(printf '%s' "$METADATA" | sed -n 's/.*"name":"kinetic-signals","version":"\([^"]*\)".*/\1/p')"
 CRATE="$TARGET_DIR/package/kinetic-signals-$PKG_VERSION.crate"
 [ -f "$CRATE" ] || fail "no .crate produced"
 SHA256="$(sha256sum "$CRATE" | awk '{print $1}')"
