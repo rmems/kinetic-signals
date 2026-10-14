@@ -66,7 +66,11 @@ TARGET_DIR="$(printf '%s' "$METADATA" | sed -n 's/.*"target_directory":"\([^"]*\
 PKG_VERSION="$(printf '%s' "$METADATA" | sed -n 's/.*"name":"kinetic-signals","version":"\([^"]*\)".*/\1/p')"
 CRATE="$TARGET_DIR/package/kinetic-signals-$PKG_VERSION.crate"
 [ -f "$CRATE" ] || fail "no .crate produced"
-SHA256="$(sha256sum "$CRATE" | awk '{print $1}')"
+if command -v sha256sum >/dev/null 2>&1; then
+    SHA256="$(sha256sum "$CRATE" | awk '{print $1}')"
+else
+    SHA256="$(shasum -a 256 "$CRATE" | awk '{print $1}')"
+fi
 echo "$CRATE $SHA256" | tee "$EVIDENCE_DIR/crate-sha256.txt"
 
 step "Extract .crate outside workspace"
