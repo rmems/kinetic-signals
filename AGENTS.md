@@ -32,8 +32,9 @@ Part of the [rmems](https://github.com/rmems) ecosystem. See [`docs/boundary-mat
 
 ## Toolchain
 
-- **Edition:** 2024 (requires Rust >= 1.99.0)
-- **MSRV:** 1.99.0 (verified in CI)
+- **Edition:** 2024
+- **MSRV:** 1.98.1 (`Cargo.toml` `rust-version`; the CI minimum-toolchain job runs `cargo +1.98.1 check`)
+- **Development toolchain:** 1.99.0 (`rust-toolchain.toml`, Docker, and the fmt/clippy/test jobs)
 - **No system dependencies** required for the library itself
 
 ## Build & test
@@ -114,6 +115,6 @@ cargo run --example demo
 
 Standard commands are documented in the **Build & test** and **Running the demo** sections above. The notes below cover the less obvious environment caveats.
 
-- **Toolchain:** Edition 2024 needs Rust >= 1.99.0. The base image ships an older `rustc`. The cloud snapshot installs and defaults to a newer `stable` (via `rustup default stable`). `rust-toolchain.toml` selects 1.99.0 for local and agent checkouts. Default builds, tests, clippy, and fmt all run under that toolchain.
+- **Toolchain:** MSRV is Rust 1.98.1. `rust-toolchain.toml` selects 1.99.0 for local and agent checkouts, which is the compiler used for fmt, clippy, and tests. The base image ships an older `rustc`; the cloud snapshot installs and defaults to a newer `stable` (via `rustup default stable`).
 - **`Cargo.lock` is gitignored** (library crate), and the lockfile is regenerated on a fresh checkout. Run `cargo fetch` to pre-warm the dependency cache.
 - **Running the app:** This crate is a library; the "application" is `cargo run --example demo`, which exercises each public API and prints results to stdout (no graphical user interface).

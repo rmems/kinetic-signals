@@ -43,7 +43,7 @@ if ! command -v rustup >/dev/null 2>&1; then
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
     sh -s -- -y --default-toolchain none --profile minimal
 fi
-# rust-toolchain.toml, rust-version, and every CI job pin 1.99.0.
+# Development toolchain. MSRV stays 1.98.1 in Cargo.toml rust-version.
 rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy
 rustup default 1.99.0
 
