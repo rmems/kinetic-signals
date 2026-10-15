@@ -55,6 +55,7 @@ Crate version **0.5.0**.
 ### Added
 
 - Versioned `snapshot` / `restore` / `from_snapshot` for `VolEstimator`, `EMA`, and `SMA`, with `SnapshotError` validation (schema version, capacity, length, layout, non-finite values, and unallocatable buffers) that does not mutate the destination on failure. `SMASnapshot::sum` is checked against the same Welford-derived window total `SMA::update` stores; `SMA::new(0)` round-trips; SMA window restore uses fallible reservation.
+- Documented the schema-v1 persistence contract: `0.5.x` patches and later minors that keep schema v1 must keep reading valid v1 checkpoints; field, ordering, and continuation changes require a schema bump; codec failures are distinct from `SnapshotError`; serde is format-agnostic and does not pin canonical bytes; volatility rings stay in physical order, SMA windows stay oldest-first, and SMA restore keeps the declared capacity from the #64 contract. Decoding an untrusted container can allocate before that validation runs.
 - Optional `serde` feature for snapshot `Serialize` / `Deserialize`. Default and `--no-default-features` builds stay zero-dependency.
 - Replay fixture `tests/fixtures/snapshot_replay.json` covering a wrapped, non-empty `VolEstimator` window plus SMA/EMA A+B vs snapshot/restore.
 - Caller-owned buffer reuse for the hot batch output paths:

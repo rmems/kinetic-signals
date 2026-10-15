@@ -66,6 +66,15 @@ section and README contract tables:
 | Hawkes zero-decay semantics | Resolved under [RM-1871](https://linear.app/rpd-34/issue/RM-1871): `beta == 0` (incl. `-0.0`) is the non-decaying limit (decay factor exactly `1.0`) through one shared helper; not a breaking change. Verify its issue state stays closed at publish time. |
 | `serde` feature (optional, off by default) | Additive; derive impls on snapshot types only. Default build remains zero-dependency. |
 
+## Schema-v1 persistence contract
+
+Documented in the README "Snapshot and restore" section and in
+`src/snapshot.rs`. While `SNAPSHOT_SCHEMA_VERSION` stays `1`, `0.5.x` patches
+and later minors must keep reading valid v1 checkpoints within
+`RESTORE_OUTPUT_TOLERANCE`. Frozen historical payloads are
+`tests/fixtures/snapshot_v1_frozen.json`. This record does not define schema
+v2 and does not promise canonical codec bytes.
+
 ## Re-run procedure on the publish commit
 
 1. Check out the exact publish commit.

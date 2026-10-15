@@ -202,24 +202,117 @@ Most APIs use `f64`. `compute_hurst` and the surprise helpers are generic and su
 
 Stateful streaming estimators (`VolEstimator`, `EMA`, `SMA`) expose
 `snapshot`, `restore`, and `from_snapshot`. Snapshots carry explicit
-`schema_version` (`SNAPSHOT_SCHEMA_VERSION`, currently `1`). Restore
-validates window sizes, sample counts, and finiteness, and leaves the
-destination unchanged on failure (`SnapshotError`). `VolEstimator`
-snapshots store the physical ring (not oldest-first) so `f32` RMS order
-is preserved and accept capacities in `1..=MAX_SNAPSHOT_CAPACITY`, matching
-its constructor (`1_000_000` `f32` samples is about 4 MiB);
-`EMA` snapshots require a finite smoothing factor in `(0, 2]`; and `SMA`
-construction and restore share the single range
-`0..=MAX_SNAPSHOT_CAPACITY` (`1_000_000` `f64` samples is about 8 MiB): a
-zero capacity is a valid no-op estimator, while a declared `capacity` above
-the ceiling is rejected (`SMA::new` panics, restore returns a `SnapshotError`)
-before the window is reserved. A restore that fails validation for any reason
-leaves the destination estimator unchanged.
+`schema_version` (`SNAPSHOT_SCHEMA_VERSION`, currently `1`). The normative
+text is the `snapshot` module rustdoc; this section is the same contract
+for checkpoint authors. Schema v2 is not defined, and restore does not
+migrate unknown versions.
 
-Processing segment A, snapshotting, restoring, then segment B matches
-processing A+B continuously within `RESTORE_OUTPUT_TOLERANCE` (`1e-6`).
-Non-finite `push`/`update` inputs are ignored by the live estimators and
-therefore do not appear in snapshots.
+#### Schema-v1 persistence and upgrades
+
+Schema v1 is the checkpoint contract introduced in `0.5.0`.
+
+- **Patch (`0.5.x`).** Every patch must keep reading a checkpoint that was
+  valid under this contract in an earlier `0.5.x` release: same logical
+  fields, successful restore, and continuation within
+  `RESTORE_OUTPUT_TOLERANCE` (`1e-6` absolute) of the outputs that the producing
+  release would emit for the same finite inputs.
+- **Minor that still ships schema v1.** The same obligation. A minor bump
+  alone is not permission to reinterpret v1.
+- **Schema change.** Incrementing `SNAPSHOT_SCHEMA_VERSION` is a breaking
+  crate release (pre-1.0: a minor bump). That release must say which schema
+  versions it still accepts and how to migrate. It is not required to keep
+  reading v1, and it must not drop v1 silently.
+
+`schema_version` does not identify the producer crate version, the estimator
+type, or the codec. Store those beside a long-lived checkpoint.
+
+Increment `SNAPSHOT_SCHEMA_VERSION` when a change would make a previously
+valid v1 checkpoint fail to decode to the same logical fields, fail
+validation, or continue outside the tolerance above. That includes:
+
+- adding a field, including a field that has a default
+- removing or renaming a field
+- changing a field's type or serialized representation
+- changing state ordering or the meaning of a field
+- tightening validation so state this contract already accepts is rejected
+
+Adding a snapshot type for some other estimator does not by itself change
+these three payloads. Rejecting state that the v1 rules already call invalid
+does not require a bump. Do not edit `tests/fixtures/snapshot_v1_frozen.json`
+to absorb a representation or numeric change. While the schema constant
+remains `1`, a failure of `tests/snapshot_v1_frozen.rs` means this contract
+broke. Those checks compare logical JSON values, not codec bytes.
+
+#### Decode errors versus snapshot errors
+
+Decoding and validation are separate steps. The optional `serde` derives do
+not call `validate`. A malformed payload, a missing required field (including
+`schema_version`), a wrong field type, or an integer outside the destination
+Rust type fails with the **codec's error**, not `SnapshotError`. JSON cannot
+decode `null` as a snapshot float or `-1` as a `usize` capacity. `serde_json`
+also cannot round-trip `NaN` or infinity: it emits `null`, which then fails
+to decode. With today's derives, self-describing formats such as JSON ignore
+unknown extra fields. That is not a supported extension mechanism and not a
+promise that a later decoder will keep ignoring them. Write only the defined
+v1 fields and store application metadata separately.
+
+After decoding succeeds, `validate`, `from_snapshot`, and `restore` reject:
+
+| Decoded state | `SnapshotError` |
+|---------------|-----------------|
+| Any schema version other than `1` (older or newer); no fallback or migration | `IncompatibleVersion { found, expected }` |
+| Declared capacity outside the estimator's supported range | `InvalidCapacity` |
+| Volatility ring length unequal to capacity, or SMA window longer than capacity | `InvalidLength` |
+| A sample or scalar that participates in restored state is non-finite | `NonFinite` |
+| Ring write index out of range, EMA alpha outside `(0, 2]`, or an SMA sum that disagrees with the window | `InconsistentState` |
+
+JSON `1e39` stored in a volatility `samples` slot is the second kind of
+failure: it decodes to `f32` infinity, then validation returns `NonFinite`.
+`from_snapshot` and `restore` can also return `AllocationFailed` if the
+validated estimator buffer cannot be reserved. `validate` does not allocate
+an estimator. When several checks would fail, do not depend on which one is
+reported first. A failed restore leaves the destination estimator unchanged.
+
+An uninitialized EMA ignores `value` (even when that value is non-finite)
+and restore sets it to `0.0`. Its `alpha` must still be finite and in
+`(0, 2]`. An empty SMA window requires `sum == 0.0` exactly. A non-empty
+SMA `sum` must agree with the Welford-derived window total within the
+magnitude-scaled, length-capped tolerance on `SMASnapshot::validate`. That
+allowance is not the absolute output-continuation tolerance.
+
+#### State ordering, capacity, and continuation
+
+| Snapshot | Ordering and restored state | Supported capacity |
+|----------|-----------------------------|--------------------|
+| `VolEstimatorSnapshot` | `samples` is the entire physical ring, **not** oldest-first. Preserve `pos` (next write index) and `full`. `full` is stored as given; restore does not recompute it. Before wrapping, only slots before `pos` contribute to RMS; every slot must still be finite. RMS squares and accumulates in `f64` and returns `f32`. | `1..=MAX_SNAPSHOT_CAPACITY` |
+| `EMASnapshot` | Preserve `alpha`, `initialized`, and the initialized `value`. No sample container. An uninitialized EMA resumes by seeding from its next finite input. | Not applicable |
+| `SMASnapshot` | `window` is **oldest-first**. Preserve the declared capacity, not only the occupied length. Restore recomputes the canonical Welford-derived `sum`, so an accepted drifted sum need not round-trip bit for bit. | `0..=MAX_SNAPSHOT_CAPACITY` |
+
+`MAX_SNAPSHOT_CAPACITY` is `1_000_000` (about 4 MiB of `f32`, or 8 MiB of
+`f64`). Construction and restore share these ranges, which is the resolution
+of the SMA capacity contract ([issue #64](https://github.com/rmems/kinetic-signals/issues/64)):
+every SMA that `SMA::new` accepts can round-trip. `VolEstimator::new` and
+`SMA::new` panic outside those ranges. Restore returns `InvalidCapacity`
+before it reserves the estimator buffer. SMA capacity `0` is a valid no-op
+(`update` returns `0.0`). A
+successful SMA restore reserves at least the declared capacity
+(`window.capacity() >= capacity`); the allocator chooses the exact `Vec`
+capacity. Windows and capacities are not clamped or truncated.
+
+For state produced through the supported estimator APIs, identical finite
+inputs, and a codec round-trip that preserves numeric values, processing
+segment A, restoring, then processing segment B matches uninterrupted A+B
+within the absolute `RESTORE_OUTPUT_TOLERANCE` (`1e-6`). On the same build
+and target, preserved summation order can make that continuation exact.
+Portable persistence promises the tolerance, not bit-identical results
+across crate, compiler, target, or codec changes. This is a
+checkpoint-continuation guarantee, not an accuracy bound against ideal real
+arithmetic. It does not cover lossy codecs, direct writes to the public
+EMA or SMA fields, or EMA arithmetic that overflows to a non-finite value.
+Non-finite `push` / `update` inputs are ignored and therefore do not appear
+in snapshots taken through those methods. Across releases that keep schema
+v1, continuation of a restored checkpoint must also stay within that
+tolerance of the outputs the producing release would have emitted.
 
 The optional `serde` feature derives `Serialize` / `Deserialize` on snapshot
 types. Snapshots and the `serde` feature ship in the upcoming `0.5.0`; until it
@@ -234,6 +327,44 @@ serde_json = "1"
 # once 0.5.0 is published and verified on crates.io:
 # kinetic-signals = { version = "0.5", features = ["serde"] }
 ```
+
+Serde support is **format-agnostic**. The application selects the codec and
+its options. There is no permanent canonical JSON, or any other codec byte
+representation, unless a future release implements one and tests it.
+Whitespace, object-key order, float formatting, and codec versions are not
+pinned. Persist numeric values losslessly when continuation matters.
+
+**Untrusted checkpoints.** `MAX_SNAPSHOT_CAPACITY` bounds the estimator
+allocation inside restore, not decoding. A decoder allocates a `samples` or
+`window` container from the encoded payload before validation looks at its
+length or at the declared capacity. A hostile document can therefore force
+that allocation even though `from_snapshot` would reject the result. Apply
+an application byte limit, and a codec container or depth limit when the
+format needs one, **before** decoding. A byte limit is not a decoded-memory
+limit for every codec. The function below is an application policy (64 KiB),
+not a crate maximum; it is smaller than the largest window this contract
+otherwise restores:
+
+```rust
+use kinetic_signals::{SMA, SMASnapshot};
+
+fn decode_small_sma(bytes: &[u8]) -> Result<SMA, Box<dyn std::error::Error>> {
+    // Also cap the transport or file read before it allocates this slice.
+    if bytes.len() > 64 * 1024 {
+        return Err("checkpoint exceeds this application's byte limit".into());
+    }
+    // Decoding can allocate `window` and fails with the codec's error.
+    let snapshot: SMASnapshot = serde_json::from_slice(bytes)?;
+    // Validation runs next and only then reserves the declared capacity.
+    Ok(SMA::from_snapshot(&snapshot)?)
+}
+```
+
+The same split — codec error, then `SnapshotError` — is an executable
+example on the `snapshot` module (missing fields, schema version `2`, and
+capacity `1_000_001`). `cargo run --example demo` prints the ordering and
+the "decode allocates first" warning for the three estimators; it does not
+itself decode bytes.
 
 ### Numeric input contract
 
@@ -321,7 +452,10 @@ ambiguous glob re-export. Replace the colliding glob with an explicit import,
 or qualify the kinetic-signals item (`kinetic_signals::compute_surprise_sequence_into`).
 
 Enable serde traits on snapshot types with `features = ["serde"]` (add a
-format crate such as `serde_json` separately).
+format crate such as `serde_json` separately). The schema-v1 section above
+is the persistence contract for those checkpoints: optional serde does not
+pin a canonical byte format, and decoding an untrusted payload can allocate
+before restore rejects it.
 
 ## Upgrading from v0.3.x
 
@@ -368,6 +502,14 @@ for that stage:
   in `src/lib.rs`).
 - Once the crate reaches `1.0.0`, standard SemVer applies (breaking changes
   require a major bump).
+
+**Snapshot schema.** `SNAPSHOT_SCHEMA_VERSION` is a persistence promise on
+top of the crate version. While it stays `1`, patch releases and later
+minors must keep the schema-v1 checkpoint contract in
+[Snapshot and restore](#snapshot-and-restore). Changing v1 fields, ordering,
+or validation so a previously valid checkpoint is rejected or continues
+outside `RESTORE_OUTPUT_TOLERANCE` requires incrementing that constant as
+well as the breaking version bump. No schema v2 is defined in this release.
 
 **What counts as public API:** every item reachable from the crate root
 (`kinetic_signals::*`), from a `pub mod` (e.g. `kinetic_signals::hawkes::*`),

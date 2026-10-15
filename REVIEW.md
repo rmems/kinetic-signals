@@ -102,6 +102,17 @@ re-export can collide with a downstream glob import of the same name):
 3. Update `docs/boundary-matrix.md` if applicable
 4. Update `CHANGELOG.md` (once introduced — see the release-documentation issue under #8) with the breaking change under a "Breaking" heading
 
+Snapshot payloads add a second rule on top of that version bump. While
+`SNAPSHOT_SCHEMA_VERSION` stays `1`, a checkpoint the schema-v1 contract
+accepts (`src/snapshot.rs`, README "Snapshot and restore") must keep
+restoring, including across patch releases. Adding, removing, reordering, or
+reinterpreting a snapshot field, or changing validation so previously valid
+v1 state is rejected or continues outside `RESTORE_OUTPUT_TOLERANCE`,
+requires incrementing `SNAPSHOT_SCHEMA_VERSION` as well. Rejecting state the
+v1 contract already calls invalid does not. Do not regenerate
+`tests/fixtures/snapshot_v1_frozen.json` to hide that break. This release
+does not define schema v2.
+
 ## Cross-repo handoff
 
 When a review comment or issue belongs to another crate:

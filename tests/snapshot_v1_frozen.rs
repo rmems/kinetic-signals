@@ -5,7 +5,9 @@
 //!
 //! The fixture is historical evidence from a named producer revision. If a test
 //! here fails after a representation change, schema-v1 compatibility broke:
-//! fix the code or bump the schema, never the fixture.
+//! fix the code or bump the schema, never the fixture. The contract those
+//! failures enforce is the schema-v1 persistence section of `src/snapshot.rs`
+//! and the README "Snapshot and restore" section.
 
 #![cfg(feature = "serde")]
 
