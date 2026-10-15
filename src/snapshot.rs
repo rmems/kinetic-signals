@@ -6,10 +6,89 @@
 //! subsequent outputs. Restore validates schema version, window sizes, sample
 //! counts, and finiteness, and never mutates the destination on failure.
 //!
-//! Numeric comparison tolerance for continuous-vs-restored outputs is
-//! [`RESTORE_OUTPUT_TOLERANCE`]: `VolEstimator` uses `f32` arithmetic, while
-//! [`crate::EMA`] and [`crate::SMA`] are `f64` and match exactly under that
-//! bound.
+//! # Schema-v1 persistence contract
+//!
+//! All `0.5.x` patch releases preserve valid v1 checkpoints, their logical
+//! fields, and the continuation guarantee below. Later minor releases that
+//! retain v1 must do the same. A breaking snapshot change requires incrementing
+//! [`SNAPSHOT_SCHEMA_VERSION`] and a breaking crate release: adding a field
+//! (even defaulted), removing/renaming one, changing its type or serialized
+//! representation, changing state ordering/meaning, or changing validation or
+//! restore so valid v1 state is rejected or continues outside the guarantee.
+//! Rejecting state already invalid under v1 does not require a bump. Future
+//! minor releases need not support v1 after a schema bump, but must document
+//! supported versions and migration. No v2 or automatic migration is defined.
+//!
+//! Optional `serde` derives are format-agnostic, not a promise of canonical
+//! JSON or any permanent codec byte representation. Applications own codec
+//! selection/options and should retain producer crate version, estimator type,
+//! and codec/version metadata separately. Current JSON decoding ignores extra
+//! fields; this is not a supported extension mechanism or permanent guarantee.
+//! Schema-v1 writers must emit only the defined fields.
+//!
+//! # Decoding and validation
+//!
+//! Deserialization does not call `validate`. Malformed input, missing required
+//! fields (including `schema_version`), wrong types, or out-of-range integers
+//! fail with the codec's error, not [`SnapshotError`]. Codec and target-width
+//! constraints apply separately from snapshot validity. Successfully decoded
+//! snapshots must still pass validation: any version other than `1` returns
+//! [`SnapshotError::IncompatibleVersion`], unsupported capacity returns
+//! [`SnapshotError::InvalidCapacity`], invalid sample counts return
+//! [`SnapshotError::InvalidLength`], non-finite participating state returns
+//! [`SnapshotError::NonFinite`], and contradictory fields return
+//! [`SnapshotError::InconsistentState`]. See each snapshot's `validate` rules.
+//! Do not depend on error precedence for multiply-invalid state.
+//! `from_snapshot`/`restore` can also return [`SnapshotError::AllocationFailed`]
+//! while reserving a validated estimator buffer; `validate` does not allocate
+//! an estimator. A failed restore always leaves its destination unchanged.
+//!
+//! **Untrusted input:** decoding `samples`/`window` can allocate before
+//! validation runs. [`MAX_SNAPSHOT_CAPACITY`] limits estimator construction and
+//! restore, not deserialization. Bound transport/file reads and input bytes
+//! before decoding, and use codec container/depth limits or bounded decoding
+//! where needed; byte limits alone do not bound decoded memory for every codec.
+//!
+//! With `serde` enabled, decoding and restore can fail independently:
+//!
+//! ```rust
+//! # #[cfg(feature = "serde")]
+//! # {
+//! use kinetic_signals::{SMA, SMASnapshot, SnapshotError};
+//!
+//! // Missing required fields: no snapshot exists to validate.
+//! assert!(serde_json::from_str::<SMASnapshot>(r#"{"schema_version":1}"#).is_err());
+//!
+//! // This small example is trusted. For external input, impose limits BEFORE
+//! // this call: decoding window can allocate even if capacity will be rejected.
+//! let decoded: SMASnapshot = serde_json::from_str(
+//!     r#"{"schema_version":1,"capacity":1000001,"window":[],"sum":0.0}"#,
+//! )?;
+//! assert!(matches!(SMA::from_snapshot(&decoded), Err(SnapshotError::InvalidCapacity)));
+//! # }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! # Ordering and numerical continuation
+//!
+//! [`VolEstimatorSnapshot`] preserves the physical `f32` ring, next write
+//! index, and wrap flag, not chronological order; RMS accumulation uses `f64`
+//! and returns `f32`. [`EMASnapshot`] preserves `alpha`, initialization, and
+//! the initialized `f64` value; an uninitialized value is ignored and reset to
+//! zero. [`SMASnapshot`] stores an oldest-first `f64` window and declared
+//! capacity; restore reserves at least that capacity and canonicalizes `sum`.
+//! A valid sum with tolerated rounding drift need not restore bit-for-bit.
+//! Construction and restore share capacity ranges: volatility
+//! `1..=MAX_SNAPSHOT_CAPACITY`, SMA `0..=MAX_SNAPSHOT_CAPACITY` (zero is a no-op).
+//!
+//! For valid API-produced state, identical continuation inputs, and a codec
+//! round-trip preserving numerical values, outputs after restore match
+//! uninterrupted processing within the absolute [`RESTORE_OUTPUT_TOLERANCE`]
+//! (`1e-6`). Exact continuation is possible on the same build/target; portable
+//! persistence does not promise bit-identical results across crate/compiler/
+//! target or codec changes. This is not an accuracy bound against ideal real
+//! arithmetic, and excludes lossy codecs, direct public-field mutation, and
+//! EMA arithmetic overflow producing non-finite state.
 
 use std::error::Error;
 use std::fmt;
@@ -28,6 +107,8 @@ pub const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
 /// requesting an unbounded allocation during restore (`VolEstimator` ring and
 /// declared `SMA` window capacity), and caps the reservation a constructor
 /// makes for the same window.
+/// It does not bound deserialization: a codec may allocate snapshot containers
+/// before restore validates them. Apply input and codec limits separately.
 pub const MAX_SNAPSHOT_CAPACITY: usize = 1_000_000;
 
 /// Absolute error bound for comparing outputs of a continuously processed
