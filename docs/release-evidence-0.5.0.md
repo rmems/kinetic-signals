@@ -12,9 +12,9 @@ publication.
 |------|-------|
 | Baseline release | `v0.4.0` tag `a46f8c947040dcd8e19c74dcb6c16ff1321231cf` (crates.io `kinetic-signals 0.4.0`) |
 | Candidate SHA | `309a86f` (PR head at qualification time; CI re-runs the gate on every commit, so this records where the manual results were obtained — re-run on the exact publish commit) |
-| Rust toolchain | 1.98.1 (CI pin and MSRV); local verification on 1.99.0 |
+| Rust toolchain | Development/CI pin 1.99.0 (`rust-toolchain.toml`, Docker, fmt/clippy/test). [RM-2052](https://linear.app/rpd-34/issue/RM-2052) moved that pin from 1.98.1 before publication (1.99.0 released 2026-10-01; rechecked 2026-10-14). The manual results below were recorded at `309a86f` and must be re-run on the publish commit. |
 | cargo-semver-checks | 0.51.0 |
-| MSRV note | Rust 1.98.1 was already the 0.4.0 MSRV (`rust-version` in the v0.4.0 `Cargo.toml`); it is unchanged, not new in 0.5.0 |
+| MSRV note | 0.4.0's MSRV was 1.98.1 and 0.5.0 keeps it. The minimum-toolchain job runs `cargo +1.98.1 check`. The development toolchain is newer on purpose; the crate does not use 1.99-only language features. |
 
 ## Automated checks
 
