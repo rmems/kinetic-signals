@@ -102,7 +102,9 @@ impl VolEstimator {
     /// Restore with [`Self::restore`] or [`Self::from_snapshot`]. Subsequent
     /// [`Self::rms`] / [`Self::push`] outputs match a continuously processed
     /// estimator within [`crate::RESTORE_OUTPUT_TOLERANCE`]. Storage order is
-    /// preserved so `f32` summation is bit-identical after restore.
+    /// preserved so `f64` RMS accumulation and the returned `f32` match exactly
+    /// after restore on the same build and target. See the
+    /// [persistence contract](crate::snapshot) for upgrade and codec guarantees.
     ///
     /// # Example
     /// ```rust

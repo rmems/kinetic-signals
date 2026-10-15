@@ -13,7 +13,21 @@ readme = "README.md"
 keywords = ["signals", "time-series", "stochastic", "hawkes", "surprise"]
 categories = ["algorithms", "science"]
 publish = ["crates-io"]
-include = ["Cargo.toml", "CHANGELOG.md", "README.md", "LICENSE-APACHE-2.0", "LICENSE-MIT", "src/**", "examples/**"]
+# `include` overrides `exclude`, so this allowlist is the crates.io exclusion
+# surface. Dev-only paths stay out by omission: agent/CI/review config,
+# `docs/`, `tests/`, `scripts/`, `Dockerfile`, `.gitignore`, and
+# `rust-toolchain.toml`. Licenses are listed because `license` is SPDX text,
+# not `license-file`. The `output_reuse` bench stays unpackaged; dependency
+# builds do not compile it (scripts/verify_package.sh).
+include = [
+    "/Cargo.toml",
+    "/CHANGELOG.md",
+    "/README.md",
+    "/LICENSE-APACHE-2.0",
+    "/LICENSE-MIT",
+    "/src",
+    "/examples",
+]
 
 [dependencies]
 serde = { version = "1", optional = true, features = ["derive"] }

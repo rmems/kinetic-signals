@@ -19,7 +19,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 cargo package --list && cargo package         # what actually ships to crates.io
 ```
 
-MSRV: Rust >= 1.98.1 (edition 2024). `Cargo.lock` is gitignored (library crate) —
+MSRV: Rust >= 1.98.1 (edition 2024). Development toolchain is 1.99.0. `Cargo.lock` is gitignored (library crate) —
 CI commands must not use `--locked`, it fails on a fresh checkout with no lockfile.
 
 ## Architecture
@@ -53,8 +53,10 @@ CI commands must not use `--locked`, it fails on a fresh checkout with no lockfi
   neuromod), or financial domain adapters (→ DendriteTrader.jl / metabolic-ledger). See
   `docs/boundary-matrix.md` before adding anything that looks domain-specific.
 - **CI** (`.github/workflows/ci.yml`): fmt, clippy, build+test, MSRV check, no-default-features
-  build, `cargo audit`, and a packaging gate (`cargo package --list` / `cargo publish
-  --dry-run` from a clean checkout — also without `--locked`, same reason as above). Separate
+  build, warnings-denied rustdoc (default + `serde`), `cargo semver-checks` against the
+  published 0.4.0 baseline, `cargo audit`, and a packaging gate (`cargo package --list` /
+  `cargo publish --dry-run` from a clean checkout — also without `--locked`, same reason
+  as above). Release qualification evidence lives in `docs/release-evidence-0.5.0.md`. Separate
   workflows: `coverage.yml` (cargo-llvm-cov → Codecov), and `docker.yml`.
 - Code review scope, per-bot handling conventions, and merge criteria are defined in
   `REVIEW.md`; GitHub issue/PR relationship and metadata conventions are in the "GitHub
