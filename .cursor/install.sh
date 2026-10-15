@@ -42,8 +42,14 @@ apt_install build-essential curl ca-certificates
 # --- Rust (rustup) ---
 export PATH="$HOME/.cargo/bin:$PATH"
 if ! command -v rustup >/dev/null 2>&1; then
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
-    sh -s -- -y --default-toolchain none --profile minimal
+  rustup_installer="$(mktemp)"
+  if ! curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o "$rustup_installer"; then
+    rm -f "$rustup_installer"
+    echo "Failed to download rustup installer" >&2
+    exit 1
+  fi
+  sh "$rustup_installer" -y --default-toolchain none --profile minimal
+  rm -f "$rustup_installer"
 fi
 # rust-version and every CI job pin 1.98.1.
 rustup toolchain install 1.98.1 --profile minimal --component rustfmt --component clippy

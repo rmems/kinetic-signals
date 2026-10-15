@@ -114,6 +114,6 @@ cargo run --example demo
 
 Standard commands are documented in the **Build & test** and **Running the demo** sections above. The notes below cover the less obvious environment caveats.
 
-- **Toolchain:** Edition 2024 needs Rust >= 1.98.1. The base image ships an older `rustc`. The cloud snapshot installs and defaults to a newer `stable` (via `rustup default stable`). Default builds, tests, clippy, and fmt all run under that toolchain.
+- **Toolchain:** MSRV is Rust 1.98.1 (`Cargo.toml` `rust-version`; the CI minimum-toolchain job and every other CI job install 1.98.1). The base image ships an older `rustc`. `.cursor/install.sh` installs that toolchain with rustfmt and clippy and selects it with `rustup default 1.98.1`. Default builds, tests, clippy, and fmt all run under 1.98.1.
 - **`Cargo.lock` is gitignored** (library crate), and the lockfile is regenerated on a fresh checkout. Run `cargo fetch` to pre-warm the dependency cache.
 - **Running the app:** This crate is a library; the "application" is `cargo run --example demo`, which exercises each public API and prints results to stdout (no graphical user interface).
