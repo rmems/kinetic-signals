@@ -36,6 +36,11 @@ Crate version **0.5.0**.
   contract documents `beta == 0` / `-0.0` as valid, and a focused
   `tests/hawkes_zero_decay.rs` covers it. No public precondition was
   tightened, so this is not a breaking change and needs no SemVer bump.
+- `SnapshotError::InvalidCapacity`'s display text now says the declared
+  capacity is outside the supported range. It previously said the capacity
+  must be greater than zero, which is wrong for an over-ceiling restore
+  (`capacity > MAX_SNAPSHOT_CAPACITY`) and for `SMA`, where capacity `0` is
+  a valid no-op. The error variant is unchanged.
 - Snapshot restore now enforces the same `1..=MAX_SNAPSHOT_CAPACITY` bound as
   `VolEstimator::new` for `VolEstimatorSnapshot`, enforces the SMA
   `0..=MAX_SNAPSHOT_CAPACITY` range shared by `SMA::new` and restore by
@@ -110,7 +115,7 @@ Crate version **0.5.0**.
 
 ## [0.4.0] - 2026-09-10
 
-First planned public crates.io release of the reusable, domain-agnostic streaming signal feature library. This entry describes the repository state prepared for publication; crates.io and docs.rs availability must still be verified after the upload.
+First public crates.io release of the reusable, domain-agnostic streaming signal feature library. Published on 2026-09-10 as `kinetic-signals` 0.4.0 (tag `v0.4.0`).
 
 ### Added
 
