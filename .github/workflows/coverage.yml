@@ -18,10 +18,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Rust 1.98.1
+      - name: Install Rust 1.99.0
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          toolchain: 1.98.1
+          toolchain: 1.99.0
 
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@50570a4fd0cb7e583e6a512c02bffb9ade28d868 # cargo-llvm-cov

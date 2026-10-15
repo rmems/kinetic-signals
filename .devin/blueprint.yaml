@@ -2,7 +2,7 @@
 # Devin environment blueprint for kinetic-signals
 # Commands run from the repo root.
 initialize: |
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97 --component clippy,rustfmt
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.99.0 --component clippy,rustfmt
   echo "PATH=$HOME/.cargo/bin:$PATH" >> "$ENVRC"
   sudo apt-get update
   sudo apt-get install -y pkg-config libssl-dev libclang-dev

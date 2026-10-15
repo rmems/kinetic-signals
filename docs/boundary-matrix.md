@@ -32,15 +32,6 @@ same boundaries:
 | `== MAX_SNAPSHOT_CAPACITY` | valid | valid |
 | `> MAX_SNAPSHOT_CAPACITY` | panics (`capacity must be <= MAX_SNAPSHOT_CAPACITY`) | returns `SnapshotError::InvalidCapacity` before reserving the window |
 
-That shared range is the SMA capacity contract: every configuration
-`SMA::new` accepts round-trips through snapshot/restore, including capacity
-`0`, and a successful restore reserves at least the declared capacity rather
-than shrinking to the occupied length. The schema-v1 persistence window, the
-split between codec errors and `SnapshotError`, and the continuation
-tolerance are documented on `snapshot` and in the README. Decoding an
-untrusted `window` or `samples` container can allocate before those restore
-checks run.
-
 ## Does NOT own
 
 | Area | Belongs to |

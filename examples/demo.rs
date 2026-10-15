@@ -238,11 +238,6 @@ fn demo_volatility() {
         estimator.rms(),
         resumed.rms()
     );
-    println!(
-        "Volatility snapshots keep the physical ring (not oldest-first). \
-         Decoding an untrusted checkpoint can allocate that ring before \
-         restore validates it; bound the encoded bytes first."
-    );
     println!();
 }
 
@@ -318,25 +313,6 @@ fn demo_indicators() {
     println!(
         "Series mean={:.3}, std={:.3} (used for ZScore)",
         stats.mean, std
-    );
-
-    let ema_snap = ema.snapshot();
-    let sma_snap = sma.snapshot();
-    let mut ema_restored = EMA::from_snapshot(&ema_snap).expect("ema snapshot");
-    let mut sma_restored = SMA::from_snapshot(&sma_snap).expect("sma snapshot");
-    let next = 115.0;
-    println!(
-        "Checkpoint continuation at {next:.1}: EMA {:.3}/{:.3}, SMA {:.3}/{:.3} (continuous/restored)",
-        ema.update(next),
-        ema_restored.update(next),
-        sma.update(next),
-        sma_restored.update(next)
-    );
-    println!(
-        "SMA window is oldest-first and keeps declared capacity {} (buffer >= {}). \
-         A serde decode of `window` allocates before that capacity is checked.",
-        sma_restored.capacity,
-        sma_restored.window.capacity()
     );
     println!();
 }

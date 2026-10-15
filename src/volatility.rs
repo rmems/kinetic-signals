@@ -102,11 +102,9 @@ impl VolEstimator {
     /// Restore with [`Self::restore`] or [`Self::from_snapshot`]. Subsequent
     /// [`Self::rms`] / [`Self::push`] outputs match a continuously processed
     /// estimator within [`crate::RESTORE_OUTPUT_TOLERANCE`]. Storage order is
-    /// preserved so `f64` RMS accumulation, and the `f32` value it returns,
-    /// match exactly after restore on the same build and target. Portable
-    /// checkpoints promise that tolerance, not bit-identical results across
-    /// compilers or targets. See the
-    /// [persistence contract](crate::snapshot#schema-v1-persistence-contract).
+    /// preserved so `f64` RMS accumulation and the returned `f32` match exactly
+    /// after restore on the same build and target. See the
+    /// [persistence contract](crate::snapshot) for upgrade and codec guarantees.
     ///
     /// # Example
     /// ```rust
