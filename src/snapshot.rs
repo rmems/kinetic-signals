@@ -127,7 +127,12 @@ const SMA_SUM_TOLERANCE_LEN_CAP: f64 = 64.0;
 pub enum SnapshotError {
     /// `schema_version` does not match [`SNAPSHOT_SCHEMA_VERSION`].
     IncompatibleVersion { found: u32, expected: u32 },
-    /// Window capacity is zero or otherwise unusable.
+    /// Declared capacity is outside that estimator's supported range.
+    ///
+    /// `VolEstimator` accepts `1..=MAX_SNAPSHOT_CAPACITY`. `SMA` accepts
+    /// `0..=MAX_SNAPSHOT_CAPACITY` (zero is a valid no-op). Both a zero
+    /// volatility capacity and any capacity above the ceiling use this
+    /// variant.
     InvalidCapacity,
     /// Occupied sample count is inconsistent with capacity.
     InvalidLength,
@@ -149,7 +154,7 @@ impl fmt::Display for SnapshotError {
                 )
             }
             Self::InvalidCapacity => {
-                write!(f, "snapshot capacity must be greater than zero")
+                write!(f, "snapshot capacity is outside the supported range")
             }
             Self::InvalidLength => {
                 write!(f, "snapshot sample count is inconsistent with capacity")
@@ -233,7 +238,7 @@ pub(crate) fn sma_canonical_sum(window: &[f64]) -> f64 {
 pub struct VolEstimatorSnapshot {
     /// Must equal [`SNAPSHOT_SCHEMA_VERSION`].
     pub schema_version: u32,
-    /// Ring capacity (`> 0`).
+    /// Ring capacity (`1..=MAX_SNAPSHOT_CAPACITY`).
     pub capacity: usize,
     /// Next write index (`< capacity`).
     pub pos: usize,
@@ -379,6 +384,10 @@ mod tests {
             format!("incompatible snapshot schema version 9 (expected {SNAPSHOT_SCHEMA_VERSION})")
         );
         assert_ne!(err, SnapshotError::NonFinite);
+        assert_eq!(
+            SnapshotError::InvalidCapacity.to_string(),
+            "snapshot capacity is outside the supported range"
+        );
     }
 
     #[test]
@@ -402,7 +411,12 @@ mod tests {
         snap.samples = vec![];
         snap.pos = 0;
         snap.full = false;
-        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
+        let err = snap.validate().unwrap_err();
+        assert_eq!(err, SnapshotError::InvalidCapacity);
+        assert_eq!(
+            err.to_string(),
+            "snapshot capacity is outside the supported range"
+        );
         snap.capacity = 2;
         snap.samples = vec![0.1];
         assert_eq!(snap.validate(), Err(SnapshotError::InvalidLength));
@@ -502,7 +516,12 @@ mod tests {
             window: vec![],
             sum: 0.0,
         };
-        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
+        let err = snap.validate().unwrap_err();
+        assert_eq!(err, SnapshotError::InvalidCapacity);
+        assert_eq!(
+            err.to_string(),
+            "snapshot capacity is outside the supported range"
+        );
     }
 
     #[test]
@@ -526,7 +545,12 @@ mod tests {
             full: false,
             samples: vec![],
         };
-        assert_eq!(snap.validate(), Err(SnapshotError::InvalidCapacity));
+        let err = snap.validate().unwrap_err();
+        assert_eq!(err, SnapshotError::InvalidCapacity);
+        assert_eq!(
+            err.to_string(),
+            "snapshot capacity is outside the supported range"
+        );
     }
 
     #[test]
