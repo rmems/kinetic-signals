@@ -126,7 +126,12 @@ const SMA_SUM_TOLERANCE_LEN_CAP: f64 = 64.0;
 #[non_exhaustive]
 pub enum SnapshotError {
     /// `schema_version` does not match [`SNAPSHOT_SCHEMA_VERSION`].
-    IncompatibleVersion { found: u32, expected: u32 },
+    IncompatibleVersion {
+        /// Version number stored in the snapshot payload.
+        found: u32,
+        /// Version number required by this crate ([`SNAPSHOT_SCHEMA_VERSION`]).
+        expected: u32,
+    },
     /// Declared capacity is outside that estimator's supported range.
     ///
     /// `VolEstimator` accepts `1..=MAX_SNAPSHOT_CAPACITY`. `SMA` accepts

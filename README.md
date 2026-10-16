@@ -1,6 +1,11 @@
 # kinetic-signals
 
-[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](https://opensource.org/licenses/MIT)
+[![crates.io](https://img.shields.io/crates/v/kinetic-signals.svg)](https://crates.io/crates/kinetic-signals)
+[![docs.rs](https://img.shields.io/docsrs/kinetic-signals)](https://docs.rs/kinetic-signals)
+[![CI](https://img.shields.io/github/actions/workflow/status/rmems/kinetic-signals/ci.yml?branch=main&label=CI)](https://github.com/rmems/kinetic-signals/actions/workflows/ci.yml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.98.1-blue)](https://github.com/rmems/kinetic-signals/blob/main/Cargo.toml)
+[![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](#license)
+[![Qlty Maintainability](https://qlty.sh/gh/rmems/projects/kinetic-signals/maintainability.svg)](https://qlty.sh/gh/rmems/projects/kinetic-signals)
 [![codecov](https://codecov.io/gh/rmems/kinetic-signals/branch/main/graph/badge.svg)](https://codecov.io/gh/rmems/kinetic-signals)
 
 Streaming feature extraction for high-velocity stochastic signals.
@@ -571,4 +576,4 @@ telemetry clients or send network events.
 
 ## Authors
 
-Raul Montoya Cardenas
+Raul Cardenas Montoya

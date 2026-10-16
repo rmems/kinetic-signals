@@ -40,7 +40,8 @@ default = []
 serde = ["dep:serde"]
 
 [package.metadata.docs.rs]
-features = ["serde"]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [[bench]]
 name = "output_reuse"

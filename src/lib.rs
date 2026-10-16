@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 
+#![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! # kinetic-signals
 //!
 //! Streaming feature extraction for high-velocity stochastic signals.
@@ -25,6 +28,27 @@
 //! - Hurst (100 samples): ~50μs
 //! - Hawkes (10 events): ~5μs
 //! - Surprise: ~100ns
+//!
+//! ## Quick start
+//!
+//! Add the crate to `Cargo.toml` (see [Installation](https://github.com/rmems/kinetic-signals#installation)
+//! in the README for registry vs git dependencies), then call the estimators
+//! from Rust:
+//!
+//! ```rust,no_run
+//! use kinetic_signals::{SurpriseParams, VolEstimator, compute_hurst, compute_surprise};
+//!
+//! let _hurst = compute_hurst(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+//! let _surprise = compute_surprise(150.0, 100.0, &SurpriseParams::default());
+//! let _vol = VolEstimator::new(64);
+//! ```
+//!
+//! ## Feature flags
+//!
+//! | Feature | Default | Description |
+//! |---------|---------|-------------|
+//! | *(none)* | yes | Core streaming estimators; zero required runtime dependencies |
+//! | `serde` | no | `Serialize` / `Deserialize` on [`VolEstimatorSnapshot`], [`EMASnapshot`], and [`SMASnapshot`] |
 //!
 //! ## Example
 //!
