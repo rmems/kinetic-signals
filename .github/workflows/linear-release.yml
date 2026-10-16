@@ -38,31 +38,47 @@ jobs:
       - name: Resolve release version
         id: version
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          case "${{ github.event_name }}" in
+          TAG_RE='^v[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.-]+)?$'
+          case "${EVENT_NAME}" in
             release)
-              echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+              tag="${RELEASE_TAG}"
               ;;
             workflow_dispatch)
-              echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+              tag="${INPUT_VERSION}"
               ;;
             push)
-              echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+              tag="${GITHUB_REF_NAME}"
+              ;;
+            *)
+              echo "Unexpected event: ${EVENT_NAME}" >&2
+              exit 1
               ;;
           esac
+          if [[ ! "${tag}" =~ ${TAG_RE} ]]; then
+            echo "Invalid release tag: ${tag}" >&2
+            exit 1
+          fi
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
 
       - name: Find previous release tag
         id: release_base
         if: github.event_name == 'push'
         shell: bash
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
           while IFS= read -r tag; do
-            [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
-            [[ "$tag" != "${{ steps.version.outputs.tag }}" ]] || continue
-            echo "base_ref=$tag" >> "$GITHUB_OUTPUT"
+            [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || continue
+            [[ "${tag}" != "${TAG}" ]] || continue
+            echo "base_ref=${tag}" >> "${GITHUB_OUTPUT}"
             exit 0
           done < <(git tag --merged HEAD --list 'v[0-9]*' --sort=-version:refname)
-          echo "No previous stable release tag is reachable from ${{ steps.version.outputs.tag }}" >&2
+          echo "No previous stable release tag is reachable from ${TAG}" >&2
           exit 1
 
       - name: Sync release commits and issues to Linear

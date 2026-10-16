@@ -238,7 +238,6 @@ pub(crate) fn sma_canonical_sum(window: &[f64]) -> f64 {
 /// `samples` is the physical ring (`samples.len() == capacity`) in storage
 /// order, not rotated oldest-first, so [`crate::VolEstimator::rms`] summation
 /// order is preserved across restore.
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VolEstimatorSnapshot {
@@ -279,7 +278,6 @@ impl VolEstimatorSnapshot {
 }
 
 /// Canonical state for [`crate::EMA`].
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EMASnapshot {
@@ -320,7 +318,6 @@ impl EMASnapshot {
 /// capacity ceiling, `0..=`[`MAX_SNAPSHOT_CAPACITY`]: restore rejects
 /// `capacity` above it before reserving the declared buffer, just as the
 /// constructor panics above it.
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SMASnapshot {
