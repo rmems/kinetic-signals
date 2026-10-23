@@ -27,35 +27,20 @@ A high-performance, domain-agnostic Rust crate for computing streaming signal st
 ## Installation
 
 The current published release on
-[crates.io](https://crates.io/crates/kinetic-signals) is `0.4.x`:
+[crates.io](https://crates.io/crates/kinetic-signals) is `0.5.0`:
 
 ```toml
 [dependencies]
-kinetic-signals = "0.4"
-```
-
-The published `0.4.x` release does **not** include the snapshot/restore APIs
-or the optional `serde` feature — those land in the upcoming `0.5.0`, which is
-not yet published. To use them today, depend on the unreleased `main` branch:
-
-```toml
-[dependencies]
-kinetic-signals = { git = "https://github.com/rmems/kinetic-signals" }
-```
-
-After `0.5.0` is published and verified on
-[crates.io](https://crates.io/crates/kinetic-signals), the registry
-dependency will become:
-
-```toml
-# upcoming 0.5.0 — not yet published
 kinetic-signals = "0.5"
 ```
 
-See the [changelog](CHANGELOG.md#release-checklist) for the release history
-and reproducible publication gates. The crates.io and docs.rs destinations for
-`0.5.0` are prepared in advance and remain unverified until publication
-completes.
+`0.5.0` adds the snapshot/restore APIs, the `*_into` buffer-reuse APIs, and the
+optional `serde` feature. Upgrading from `0.4.x`? Note the breaking
+`MAX_SNAPSHOT_CAPACITY` ceiling on `SMA::new` / `VolEstimator::new`; see
+[Upgrading from v0.4.x](#upgrading-from-v04x).
+
+See the [changelog](CHANGELOG.md) for the release history and reproducible
+publication gates.
 
 ## Usage
 
@@ -90,9 +75,7 @@ vol.push(0.02);
 println!("RMS vol = {:.4}", vol.rms());
 ```
 
-Snapshot / restore is new in the upcoming `0.5.0` (unreleased; use the `main`
-git dependency from [Installation](#installation) until it is published) and is
-not available on the published `0.4.x` release:
+Snapshot / restore is new in `0.5.0` and is not available on `0.4.x`:
 
 ```rust
 use kinetic_signals::VolEstimator;
@@ -112,9 +95,8 @@ resumed.push(0.015);
 High-frequency telemetry loops can keep a caller-owned `Vec` and pass it to
 the `*_into` APIs instead of allocating a new output on every window.
 
-> The `*_into` buffer-reuse APIs are new in the upcoming `0.5.0` (unreleased;
-> use the `main` git dependency from [Installation](#installation) until it is
-> published) and are not available on the published `0.4.x` release.
+> The `*_into` buffer-reuse APIs are new in `0.5.0` and are not available on
+> `0.4.x`.
 
 | Path | Allocating wrapper | Reuse API | Output length |
 |------|--------------------|-----------|---------------|
@@ -306,17 +288,12 @@ non-finite. Non-finite `push`/`update` inputs are ignored, but that alone does
 not guarantee that every caller-modified or overflowed state can be restored.
 
 The optional `serde` feature derives `Serialize` / `Deserialize` on snapshot
-types. Snapshots and the `serde` feature ship in the upcoming `0.5.0`; until it
-is published, depend on the unreleased `main` branch. Pair the feature with a
+types. Snapshots and the `serde` feature ship in `0.5.0`. Pair the feature with a
 format crate such as `serde_json` in the consuming application:
 
 ```toml
-# unreleased main (snapshot + serde APIs)
-kinetic-signals = { git = "https://github.com/rmems/kinetic-signals", features = ["serde"] }
+kinetic-signals = { version = "0.5", features = ["serde"] }
 serde_json = "1"
-
-# once 0.5.0 is published and verified on crates.io:
-# kinetic-signals = { version = "0.5", features = ["serde"] }
 ```
 
 Serde support is **format-agnostic**: the consuming application selects and

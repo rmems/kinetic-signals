@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+
 Crate version **0.5.0**.
 
 ### Fixed
@@ -172,12 +174,13 @@ After approval and upload:
 1. Verify the crate page and metadata on [crates.io](https://crates.io/crates/kinetic-signals).
 2. Verify the published version builds and renders on [docs.rs](https://docs.rs/kinetic-signals).
 3. Create and push the exact `v0.5.0` tag.
-4. Create the GitHub Release from the `[Unreleased]` `0.5.0` entry, without diverging release notes.
+4. Create the GitHub Release from the `[Unreleased]` entry (the `0.5.0` entry for that release), without diverging release notes.
 5. Change README installation guidance to `kinetic-signals = "0.5"` only after the registry version is live.
 6. Observability release integration is owned by consuming applications; no
    crate-side release gate remains.
 
 Do not use `--allow-dirty`, `--no-verify`, or committed registry credentials to bypass a failed gate.
 
-[Unreleased]: https://github.com/rmems/kinetic-signals/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/rmems/kinetic-signals/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/rmems/kinetic-signals/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/rmems/kinetic-signals/releases/tag/v0.4.0
