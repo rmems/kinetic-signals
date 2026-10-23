@@ -174,7 +174,7 @@ After approval and upload:
 1. Verify the crate page and metadata on [crates.io](https://crates.io/crates/kinetic-signals).
 2. Verify the published version builds and renders on [docs.rs](https://docs.rs/kinetic-signals).
 3. Create and push the exact `v0.5.0` tag.
-4. Create the GitHub Release from the `[Unreleased]` entry (the `0.5.0` entry for that release), without diverging release notes.
+4. Create the GitHub Release from the matching dated changelog entry (promoted from `[Unreleased]` at release time), without diverging release notes.
 5. Change README installation guidance to `kinetic-signals = "0.5"` only after the registry version is live.
 6. Observability release integration is owned by consuming applications; no
    crate-side release gate remains.
