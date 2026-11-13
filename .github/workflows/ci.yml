@@ -114,7 +114,7 @@ jobs:
           cargo semver-checks check-release --baseline-version 0.4.0 --release-type patch
 
   msrv:
-    name: Minimum Rust Check (1.98.1)
+    name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -123,10 +123,21 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Rust 1.98.1
+      - name: Read rust-version from Cargo.toml
+        id: msrv
+        run: |
+          MSRV=$(sed -n 's/^rust-version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          if [ -z "$MSRV" ]; then
+            echo "::error::rust-version not found in Cargo.toml"
+            exit 1
+          fi
+          echo "version=$MSRV" >> "$GITHUB_OUTPUT"
+          echo "MSRV: $MSRV"
+
+      - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          toolchain: 1.98.1
+          toolchain: ${{ steps.msrv.outputs.version }}
 
       - name: Cache cargo registry
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -135,11 +146,14 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-msrv-${{ hashFiles('**/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-msrv-${{ steps.msrv.outputs.version }}-${{ hashFiles('**/Cargo.toml') }}
 
       # rust-toolchain.toml selects 1.99.0; the + override is the MSRV.
       - name: Check
-        run: cargo +1.98.1 check
+        run: cargo +${{ steps.msrv.outputs.version }} check --all-targets --all-features
+
+      - name: Test
+        run: cargo +${{ steps.msrv.outputs.version }} test --all-features
 
   no-default-features:
     name: No Default Features

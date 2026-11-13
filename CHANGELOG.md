@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Lowered `rust-version` (MSRV) from 1.98.1 to **1.85**, the measured floor for
+  `cargo +1.85.0 check --all-targets --all-features` and `test --all-features`
+  (edition 2024 requires 1.85). The development toolchain stays pinned at 1.99.0
+  (`rust-toolchain.toml`, Dockerfile, non-MSRV CI jobs); the `msrv` CI job now
+  reads `rust-version` from `Cargo.toml` instead of hardcoding a toolchain.
+
 ## [0.5.0] - 2026-10-16
 
 Crate version **0.5.0**.

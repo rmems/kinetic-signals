@@ -3,7 +3,7 @@
 [![crates.io](https://img.shields.io/crates/v/kinetic-signals.svg)](https://crates.io/crates/kinetic-signals)
 [![docs.rs](https://img.shields.io/docsrs/kinetic-signals)](https://docs.rs/kinetic-signals)
 [![CI](https://img.shields.io/github/actions/workflow/status/rmems/kinetic-signals/ci.yml?branch=main&label=CI)](https://github.com/rmems/kinetic-signals/actions/workflows/ci.yml)
-[![MSRV](https://img.shields.io/badge/MSRV-1.98.1-blue)](https://github.com/rmems/kinetic-signals/blob/main/Cargo.toml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue)](https://github.com/rmems/kinetic-signals/blob/main/Cargo.toml)
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Qlty Maintainability](https://qlty.sh/gh/rmems/projects/kinetic-signals/maintainability.svg)](https://qlty.sh/gh/rmems/projects/kinetic-signals)
 [![codecov](https://codecov.io/gh/rmems/kinetic-signals/branch/main/graph/badge.svg)](https://codecov.io/gh/rmems/kinetic-signals)
@@ -139,7 +139,7 @@ cargo run --example demo
 
 ### Development
 
-**MSRV:** Rust >= 1.98.1 (edition 2024). Development and CI use Rust 1.99.0 (`rust-toolchain.toml`).
+**MSRV:** Rust >= 1.85 (edition 2024). Development and CI use Rust 1.99.0 (`rust-toolchain.toml`); the `msrv` CI job reads `rust-version` from `Cargo.toml` and is allowed to differ from the dev pin.
 
 The complete release validation sequence is in the
 [v0.4.0 changelog](CHANGELOG.md#release-checklist); `cargo publish --dry-run`
