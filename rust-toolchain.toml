@@ -1,7 +1,9 @@
 [toolchain]
-# Development toolchain. Cargo.toml `rust-version` (MSRV) stays 1.98.1.
+# Development toolchain. Cargo.toml `rust-version` (MSRV) is the true
+# minimum (1.85) and may be older than this channel on purpose.
 # CI fmt/clippy/test jobs and Dockerfile use this channel. The msrv job
-# must invoke `cargo +1.98.1`; this file would otherwise override it.
+# reads `rust-version` from Cargo.toml and overrides this file with
+# `cargo +<msrv>`; do not pin this channel to `rust-version`.
 channel = "1.99.0"
 components = ["clippy", "rustfmt"]
 profile = "minimal"

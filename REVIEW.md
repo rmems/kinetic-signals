@@ -102,6 +102,20 @@ re-export can collide with a downstream glob import of the same name):
 3. Update `docs/boundary-matrix.md` if applicable
 4. Update `CHANGELOG.md` (once introduced — see the release-documentation issue under #8) with the breaking change under a "Breaking" heading
 
+## Rust toolchain / MSRV policy
+
+`rust-version` in `Cargo.toml` is the **true minimum supported Rust version** — the oldest rustc that actually builds the crate (`cargo +<msrv> check --all-targets --all-features`). It is a measured floor, not a copy of the current compiler, and must not be raised just to match CI.
+
+The **development toolchain** is pinned separately at 1.99.x in `rust-toolchain.toml`, the `Dockerfile`, and every non-MSRV CI job (`validate`, `rustdoc`, `api-diff`, `no-default-features`, `package`, `audit`, `coverage`). The two pins are **allowed and expected to differ**: `rust-version <= toolchain channel`.
+
+A dedicated `msrv` job in `.github/workflows/ci.yml` reads `rust-version` from `Cargo.toml`, installs that toolchain, and runs `cargo +<msrv> check --all-targets --all-features` (plus `test --all-features`, which currently passes on the MSRV).
+
+When reviewing:
+
+- Flag any change that raises `rust-version` without a demonstrated language/std requirement.
+- Flag any change that pins a non-MSRV CI job or `rust-toolchain.toml` to the `rust-version` value, or that hardcodes a toolchain in the `msrv` job instead of reading `Cargo.toml`.
+- `rust-version` may be a minor (`1.85`) or patch (`1.88.0`) spec; prefer the coarsest value that still builds.
+
 ## Cross-repo handoff
 
 When a review comment or issue belongs to another crate:
